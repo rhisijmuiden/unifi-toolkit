@@ -281,6 +281,16 @@ if __name__ == "__main__":
     from tools.network_pulse import __version__ as pulse_version
     from tools.house_arrest import __version__ as arrest_version
 
+    # Swap in a database staged by a restore from the web UI, before the
+    # migrations run, so a backup from an older version is upgraded.
+    try:
+        from shared.backup.service import apply_pending_restore
+        restored = apply_pending_restore()
+        if restored:
+            print(restored)
+    except Exception as restore_error:
+        print(f"Could not apply the staged restore: {restore_error}")
+
     # Run migrations FIRST, before any uvicorn/async stuff
     run_migrations()
 

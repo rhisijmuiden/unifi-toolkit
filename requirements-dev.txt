@@ -7,6 +7,8 @@ pytest-asyncio>=1.2.0
 pytest-mock>=3.15.1
 pytest-cov>=4.1.0
 httpx>=0.28.1
+pyftpdlib>=2.0.0   # FTP/FTPS backup location tests
+pyopenssl>=24.0.0  # FTPS test server
 
 # Linting and formatting
 black>=24.0.0

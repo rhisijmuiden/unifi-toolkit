@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backups · UniFi Toolkit</title>
+    <script>
+        document.documentElement.setAttribute('data-theme', (function () {
+            try { return localStorage.getItem('unifi-toolkit-theme') || 'light'; } catch (e) { return 'light'; }
+        })());
+    </script>
+    {% include "_brand_head.html" %}
+    <link rel="stylesheet" href="/static/css/admin.css?v=4">
+</head>
+<body class="has-shell admin-page">
+{% set nav_active = "backups" %}
+{% include "_sidebar.html" %}
+<main class="admin-main">
+    <header class="admin-header">
+        <div>
+            <p class="admin-eyebrow">System</p>
+            <h1>Backups</h1>
+            <p>Encrypted backups of the toolkit's database and settings, kept on this server and copied to your backup locations.</p>
+        </div>
+        <span class="pill" id="sched-state">Off</span>
+    </header>
+
+    <section class="admin-card">
+        <div class="card-head">
+            <div>
+                <h2>Back up now</h2>
+                <p class="admin-sub">A full backup holds everything. An incremental backup holds only what changed since the previous backup.</p>
+            </div>
+        </div>
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary" data-run="full">Full backup</button>
+            <button type="button" class="btn btn-ghost" data-run="incremental">Incremental backup</button>
+        </div>
+        <div class="notice" id="run-msg" role="status" hidden></div>
+    </section>
+
+    <form class="admin-card" id="settings-form" novalidate>
+        <h2>Schedule and encryption</h2>
+        <p class="admin-sub">Every backup is encrypted with your passphrase before it leaves the toolkit.</p>
+        <div class="admin-grid">
+            <div class="field span-2">
+                <label class="switch">
+                    <input type="checkbox" name="enabled">
+                    <span class="track"></span>
+                    <span>Back up every day</span>
+                </label>
+            </div>
+            <div class="field">
+                <label for="run_time">Time</label>
+                <input type="text" id="run_time" name="run_time" inputmode="numeric" maxlength="5" aria-describedby="time-hint">
+                <small id="time-hint">24-hour clock, for example 03:00.</small>
+            </div>
+            <div class="field">
+                <label for="full_every_days">Full backup every (days)</label>
+                <input type="number" id="full_every_days" name="full_every_days" min="1" max="90" aria-describedby="full-hint">
+                <small id="full-hint">The other days are incremental.</small>
+            </div>
+            <div class="field">
+                <label for="keep_chains">Full backups to keep</label>
+                <input type="number" id="keep_chains" name="keep_chains" min="1" max="100" aria-describedby="keep-hint">
+                <small id="keep-hint">Each with its incremental backups. Older ones are removed here and at every location.</small>
+            </div>
+            <div class="field">
+                <label for="passphrase">Encryption passphrase</label>
+                <input type="password" id="passphrase" name="passphrase" autocomplete="new-password" aria-describedby="pass-hint">
+                <small id="pass-hint">At least 12 characters.</small>
+            </div>
+            <div class="field span-2">
+                <label class="switch">
+                    <input type="checkbox" name="notify_on_failure">
+                    <span class="track"></span>
+                    <span>Mail me when a backup fails</span>
+                </label>
+                <small>Uses the mail server and its default recipients.</small>
+            </div>
+        </div>
+        <div class="notice warn">Keep the passphrase in your password manager. Without it, nobody can restore these backups, including you.</div>
+        <div class="btn-row" style="margin-top: var(--space-4)">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+        <div class="notice" id="settings-msg" role="status" hidden></div>
+    </form>
+
+    <section class="admin-card">
+        <div class="card-head">
+            <div>
+                <h2>Backup locations</h2>
+                <p class="admin-sub">Every backup is copied to each location that is switched on. A location that was offline catches up on the next backup.</p>
+            </div>
+            <button type="button" class="btn btn-ghost" id="add-dest">Add location</button>
+        </div>
+        <div class="item-list" id="dest-list"></div>
+    </section>
+
+    <section class="admin-card">
+        <h2>Backups on this server</h2>
+        <p class="admin-sub">The newest group is the current chain: a full backup and the incremental backups made after it.</p>
+        <div id="local-list"></div>
+    </section>
+
+    <section class="admin-card">
+        <h2>History</h2>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>Started</th><th>What</th><th>Result</th><th>Details</th></tr></thead>
+                <tbody id="runs"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<dialog class="shell-dialog admin-dialog" id="dest-dialog" aria-labelledby="dest-title">
+    <form id="dest-form" method="dialog" novalidate>
+        <div class="shell-dialog-head">
+            <h2 id="dest-title">Backup location</h2>
+            <button type="button" class="shell-icon-btn" data-close aria-label="Close">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z" fill="currentColor"/></svg>
+            </button>
+        </div>
+        <div class="admin-grid">
+            <div class="field span-2">
+                <label id="kind-label">Type</label>
+                <div class="segmented" role="radiogroup" aria-labelledby="kind-label">
+                    <label><input type="radio" name="kind" value="scp"><span>SCP</span></label>
+                    <label><input type="radio" name="kind" value="ftps"><span>FTPS</span></label>
+                    <label><input type="radio" name="kind" value="ftp"><span>FTP</span></label>
+                </div>
+                <small id="kind-hint"></small>
+            </div>
+            <div class="field">
+                <label for="d-name">Name</label>
+                <input type="text" id="d-name" name="name" aria-describedby="d-name-hint">
+                <small id="d-name-hint">For example NAS in the office.</small>
+            </div>
+            <div class="field">
+                <label class="switch" style="margin-top: 26px">
+                    <input type="checkbox" name="enabled">
+                    <span class="track"></span>
+                    <span>Copy backups here</span>
+                </label>
+            </div>
+            <div class="field">
+                <label for="d-host">Server</label>
+                <input type="text" id="d-host" name="host" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="d-port">Port</label>
+                <input type="number" id="d-port" name="port" min="1" max="65535">
+            </div>
+            <div class="field">
+                <label for="d-user">Username</label>
+                <input type="text" id="d-user" name="username" spellcheck="false" autocomplete="off">
+            </div>
+            <div class="field">
+                <label for="d-pass">Password</label>
+                <input type="password" id="d-pass" name="password" autocomplete="new-password" aria-describedby="d-pass-hint">
+                <small id="d-pass-hint"></small>
+            </div>
+            <div class="field span-2" data-only="scp">
+                <label for="d-key">Private key (optional)</label>
+                <textarea id="d-key" name="private_key" spellcheck="false" aria-describedby="d-key-hint"></textarea>
+                <small id="d-key-hint">An OpenSSH private key without a passphrase. Stored encrypted.</small>
+            </div>
+            <div class="field span-2">
+                <label for="d-path">Folder</label>
+                <input type="text" id="d-path" name="path" spellcheck="false" aria-describedby="d-path-hint">
+                <small id="d-path-hint">Created when it doesn't exist. Use a folder only for these backups: retention removes old backup files from it.</small>
+            </div>
+            <div class="field span-2" data-only="ftps">
+                <label class="switch">
+                    <input type="checkbox" name="verify_tls">
+                    <span class="track"></span>
+                    <span>Check the server's certificate</span>
+                </label>
+                <small>Turn this off only for a server with a self-signed certificate on your own network.</small>
+            </div>
+        </div>
+        <div class="notice warn" data-only="ftp">Plain FTP sends the username and password unencrypted. The backups themselves are always encrypted.</div>
+        <div class="btn-row" style="margin-top: var(--space-4)">
+            <button type="submit" class="btn btn-primary">Save and test</button>
+            <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        </div>
+        <div class="notice" id="dest-msg" role="status" hidden></div>
+    </form>
+</dialog>
+
+<dialog class="shell-dialog admin-dialog" id="remote-dialog" aria-labelledby="remote-title">
+    <div class="shell-dialog-head">
+        <div>
+            <h2 id="remote-title">Backups at this location</h2>
+            <p class="shell-muted" id="remote-sub" data-no-i18n></p>
+        </div>
+        <button type="button" class="shell-icon-btn" data-close aria-label="Close">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z" fill="currentColor"/></svg>
+        </button>
+    </div>
+    <div id="remote-list"></div>
+</dialog>
+
+<dialog class="shell-dialog admin-dialog" id="restore-dialog" aria-labelledby="restore-title">
+    <form id="restore-form" method="dialog" novalidate>
+        <div class="shell-dialog-head">
+            <h2 id="restore-title">Restore a backup</h2>
+            <button type="button" class="shell-icon-btn" data-close aria-label="Close">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z" fill="currentColor"/></svg>
+            </button>
+        </div>
+        <dl class="shell-facts">
+            <div><dt>Backup</dt><dd class="mono" id="r-name" data-no-i18n></dd></div>
+            <div><dt>From</dt><dd id="r-from" data-no-i18n></dd></div>
+        </dl>
+        <p>The toolkit's current data and settings are replaced by this backup, and the toolkit restarts. The current database is kept as a safety copy on this server.</p>
+        <div class="field">
+            <label for="r-pass">Passphrase</label>
+            <input type="password" id="r-pass" autocomplete="off" aria-describedby="r-pass-hint">
+            <small id="r-pass-hint">Leave empty to use the saved passphrase. Enter the old one for backups made before you changed it.</small>
+        </div>
+        <label class="check" style="margin-top: var(--space-3)">
+            <input type="checkbox" id="r-confirm">
+            <span>Replace the current data with this backup</span>
+        </label>
+        <div class="btn-row" style="margin-top: var(--space-4)">
+            <button type="submit" class="btn btn-primary" id="r-go" disabled>Restore</button>
+            <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        </div>
+        <div class="notice" id="restore-msg" role="status" hidden></div>
+    </form>
+</dialog>
+
+<div class="overlay" id="restart-overlay" hidden>
+    <div>
+        <div class="spinner"></div>
+        <h2>Restoring</h2>
+        <p>The toolkit restarts with the restored data. This page reloads by itself.</p>
+    </div>
+</div>
+
+<script>
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { settings: null, dests: [], status: null, restore: null, editing: null };
+    var PORTS = { scp: 22, ftps: 21, ftp: 21 };
+    var KIND_HINTS = {
+        scp: 'Copies over SSH. Works with most Linux servers and NAS devices.',
+        ftps: 'FTP with TLS encryption (explicit FTPS).',
+        ftp: 'Unencrypted FTP. Use it only on your own network.'
+    };
+
+    function h(tag, attrs, kids) {
+        var el = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+            if (k === 'text') el.textContent = attrs[k];
+            else if (k === 'on') Object.keys(attrs.on).forEach(function (ev) { el.addEventListener(ev, attrs.on[ev]); });
+            else if (attrs[k] !== null && attrs[k] !== undefined && attrs[k] !== false) el.setAttribute(k, attrs[k]);
+        });
+        (kids || []).forEach(function (c) { if (c) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return el;
+    }
+    function show(el, kind, text) { el.hidden = false; el.className = 'notice ' + kind; el.textContent = text; }
+    function api(method, url, body) {
+        return fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body ? JSON.stringify(body) : undefined
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                if (!r.ok) {
+                    var d = data.detail;
+                    if (Array.isArray(d)) d = d.map(function (x) { return x.msg; }).join(' ');
+                    throw new Error(d || ('HTTP ' + r.status));
+                }
+                return data;
+            });
+        });
+    }
+    function size(n) {
+        if (n === null || n === undefined) return '';
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+        if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+        return (n / 1073741824).toFixed(2) + ' GB';
+    }
+    function when(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        var lang = (window.toolkitLang && window.toolkitLang.current === 'nl') ? 'nl-NL' : 'en-GB';
+        return d.toLocaleString(lang, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+    function kindTag(kind) {
+        return h('span', { class: 'tag' + (kind === 'full' ? ' full' : ''), text: kind === 'full' ? 'Full' : 'Incremental' });
+    }
+
+    // ---------------- settings
+    var sf = $('settings-form');
+    function fillSettings(s) {
+        state.settings = s;
+        sf.enabled.checked = s.enabled;
+        sf.run_time.value = s.run_time;
+        sf.full_every_days.value = s.full_every_days;
+        sf.keep_chains.value = s.keep_chains;
+        sf.notify_on_failure.checked = s.notify_on_failure;
+        sf.passphrase.value = '';
+        $('pass-hint').textContent = s.has_passphrase
+            ? 'A passphrase is saved. Leave empty to keep it. A new passphrase starts a new chain.'
+            : 'At least 12 characters.';
+        var pill = $('sched-state');
+        if (s.enabled) { pill.className = 'pill ok'; pill.textContent = 'Daily at ' + s.run_time; }
+        else { pill.className = 'pill'; pill.textContent = 'Schedule off'; }
+    }
+    sf.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var msg = $('settings-msg');
+        api('PUT', '/api/backup/settings', {
+            enabled: sf.enabled.checked,
+            run_time: sf.run_time.value.trim(),
+            full_every_days: parseInt(sf.full_every_days.value, 10) || 7,
+            keep_chains: parseInt(sf.keep_chains.value, 10) || 4,
+            notify_on_failure: sf.notify_on_failure.checked,
+            passphrase: sf.passphrase.value || null
+        }).then(function (s) { fillSettings(s); show(msg, 'ok', 'Settings saved.'); })
+          .catch(function (err) { show(msg, 'err', err.message); });
+    });
+
+    // ---------------- run now
+    document.querySelectorAll('[data-run]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var msg = $('run-msg');
+            api('POST', '/api/backup/run', { kind: b.getAttribute('data-run') })
+                .then(function () { show(msg, 'warn', 'Backup running…'); refresh(); })
+                .catch(function (err) { show(msg, 'err', err.message); });
+        });
+    });
+
+    // ---------------- locations
+    function renderDests() {
+        var box = $('dest-list');
+        box.textContent = '';
+        if (!state.dests.length) {
+            box.appendChild(h('div', { class: 'empty', text: 'No backup locations yet. Backups are kept on this server only.' }));
+            return;
+        }
+        state.dests.forEach(function (d) {
+            var meta = d.kind.toUpperCase() + ' · ' + (d.username ? d.username + '@' : '') + d.host + ':' + d.port + (d.path ? ' · ' + d.path : '');
+            var st = d.last_status
+                ? h('div', { class: 'item-meta' }, [h('span', { class: 'status ' + d.last_status, text: d.last_status === 'ok' ? 'OK' : 'Failed' }), h('span', { 'data-no-i18n': '' }, [' · ' + when(d.last_run_at) + ' · ']), h('span', { text: d.last_message || '' })])
+                : h('div', { class: 'item-meta', text: 'Not tested yet.' });
+            var fp = d.fingerprint ? h('div', { class: 'item-meta' }, [h('span', { text: 'Host key' }), h('span', { class: 'mono', 'data-no-i18n': '' }, [' ' + d.fingerprint])]) : null;
+            box.appendChild(h('div', { class: 'item' }, [
+                h('div', { class: 'item-main' }, [
+                    h('div', { class: 'item-title' }, [h('span', { 'data-no-i18n': '', text: d.name }), d.enabled ? null : h('span', { class: 'tag', text: 'Off' })]),
+                    h('div', { class: 'item-meta', 'data-no-i18n': '', text: meta }), st, fp
+                ]),
+                h('div', { class: 'item-actions' }, [
+                    h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Test', on: { click: function () { testDest(d, this); } } }),
+                    h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Backups', on: { click: function () { openRemote(d); } } }),
+                    h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Edit', on: { click: function () { openDest(d); } } }),
+                    d.host_key ? h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Forget host key', on: { click: function () {
+                        if (!confirm('Forget the saved host key? The next test trusts whatever key the server shows.')) return;
+                        api('DELETE', '/api/backup/destinations/' + d.id + '/host-key').then(loadDests);
+                    } } }) : null,
+                    h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Delete', on: { click: function () {
+                        if (!confirm('Delete this location? Backups already stored there are left alone.')) return;
+                        api('DELETE', '/api/backup/destinations/' + d.id).then(loadDests);
+                    } } })
+                ])
+            ]));
+        });
+    }
+    function loadDests() {
+        return api('GET', '/api/backup/destinations').then(function (ds) { state.dests = ds; renderDests(); });
+    }
+    function testDest(d, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Testing…';
+        api('POST', '/api/backup/destinations/' + d.id + '/test')
+            .catch(function () {})
+            .then(function () { return loadDests(); });
+    }
+
+    var df = $('dest-form'), dd = $('dest-dialog');
+    function kindChanged() {
+        var k = (df.querySelector('input[name=kind]:checked') || {}).value || 'scp';
+        document.querySelectorAll('#dest-form [data-only]').forEach(function (el) { el.hidden = el.getAttribute('data-only') !== k; });
+        $('kind-hint').textContent = KIND_HINTS[k];
+        var cur = parseInt(df.port.value, 10);
+        if (!cur || cur === 21 || cur === 22) df.port.value = PORTS[k];
+    }
+    df.querySelectorAll('input[name=kind]').forEach(function (r) { r.addEventListener('change', kindChanged); });
+    function openDest(d) {
+        state.editing = d || null;
+        df.reset();
+        $('dest-msg').hidden = true;
+        $('dest-title').textContent = d ? 'Edit backup location' : 'Add backup location';
+        var k = d ? d.kind : 'scp';
+        df.querySelector('input[name=kind][value=' + k + ']').checked = true;
+        df.name.value = d ? d.name : '';
+        df.enabled.checked = d ? d.enabled : true;
+        df.host.value = d ? d.host : '';
+        df.port.value = d ? d.port : PORTS[k];
+        df.username.value = d ? d.username : '';
+        df.path.value = d ? d.path : 'unifi-toolkit-backups';
+        df.verify_tls.checked = d ? d.verify_tls : true;
+        $('d-pass-hint').textContent = d && d.has_password ? 'A password is saved. Leave empty to keep it.' : 'Stored encrypted.';
+        $('d-key-hint').textContent = d && d.has_private_key
+            ? 'A key is saved. Leave empty to keep it.'
+            : 'An OpenSSH private key without a passphrase. Stored encrypted.';
+        kindChanged();
+        dd.showModal();
+    }
+    $('add-dest').addEventListener('click', function () { openDest(null); });
+    df.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var msg = $('dest-msg');
+        var d = state.editing;
+        var body = {
+            name: df.name.value, kind: (df.querySelector('input[name=kind]:checked') || {}).value,
+            host: df.host.value, port: parseInt(df.port.value, 10) || null, username: df.username.value,
+            password: df.password.value || null, private_key: df.private_key.value || null,
+            verify_tls: df.verify_tls.checked, path: df.path.value, enabled: df.enabled.checked
+        };
+        show(msg, 'warn', 'Saving and testing…');
+        api(d ? 'PUT' : 'POST', '/api/backup/destinations' + (d ? '/' + d.id : ''), body)
+            .then(function (saved) {
+                state.editing = saved;
+                return api('POST', '/api/backup/destinations/' + saved.id + '/test');
+            })
+            .then(function (r) {
+                show(msg, 'ok', r.fingerprint ? 'Connection and write test passed. Host key saved: ' + r.fingerprint
+                                              : 'Connection and write test passed.');
+                loadDests();
+                setTimeout(function () { dd.close(); }, 1500);
+            })
+            .catch(function (err) { show(msg, 'err', err.message); loadDests(); });
+    });
+
+    // ---------------- backup lists
+    function chainList(chains, source, emptyText) {
+        var wrap = h('div');
+        if (!chains.length) { wrap.appendChild(h('div', { class: 'empty', text: emptyText })); return wrap; }
+        chains.forEach(function (c) {
+            var group = h('div', { class: 'chain item-list' });
+            c.items.forEach(function (it) {
+                group.appendChild(h('div', { class: 'item' }, [
+                    h('div', { class: 'item-main' }, [
+                        h('div', { class: 'item-title' }, [kindTag(it.kind), h('span', { 'data-no-i18n': '', text: when(it.created) })]),
+                        h('div', { class: 'item-meta mono', 'data-no-i18n': '', text: it.name + (it.size ? ' · ' + size(it.size) : '') })
+                    ]),
+                    h('div', { class: 'item-actions' }, [
+                        source === 'local' ? h('a', { class: 'btn btn-ghost btn-sm', href: '/api/backup/local/' + encodeURIComponent(it.name), text: 'Download' }) : null,
+                        h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Restore', on: { click: function () { openRestore(source, it.name); } } })
+                    ])
+                ]));
+            });
+            wrap.appendChild(group);
+        });
+        return wrap;
+    }
+    var rd = $('remote-dialog');
+    function openRemote(d) {
+        $('remote-sub').textContent = d.name + ' · ' + d.host;
+        var box = $('remote-list');
+        box.textContent = '';
+        box.appendChild(h('div', { class: 'empty', text: 'Loading…' }));
+        rd.showModal();
+        api('GET', '/api/backup/destinations/' + d.id + '/backups').then(function (chains) {
+            box.textContent = '';
+            box.appendChild(chainList(chains, d.id, 'No backups at this location yet.'));
+        }).catch(function (err) {
+            box.textContent = '';
+            box.appendChild(h('div', { class: 'notice err', text: err.message }));
+        });
+    }
+
+    // ---------------- restore
+    var xd = $('restore-dialog'), xf = $('restore-form');
+    function openRestore(source, name) {
+        if (rd.open) rd.close();
+        state.restore = { source: source, name: name };
+        $('r-name').textContent = name;
+        var dest = state.dests.filter(function (d) { return d.id === source; })[0];
+        $('r-from').textContent = source === 'local' ? (window.toolkitLang ? window.toolkitLang.t('This server') : 'This server') : (dest ? dest.name : '');
+        $('r-pass').value = '';
+        $('r-confirm').checked = false;
+        $('r-go').disabled = true;
+        $('restore-msg').hidden = true;
+        xd.showModal();
+    }
+    $('r-confirm').addEventListener('change', function () { $('r-go').disabled = !this.checked; });
+    xf.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var msg = $('restore-msg');
+        $('r-go').disabled = true;
+        show(msg, 'warn', 'Downloading and checking the backup…');
+        api('POST', '/api/backup/restore', {
+            source: state.restore.source, name: state.restore.name,
+            passphrase: $('r-pass').value || null, confirm: true
+        }).then(function () {
+            xd.close();
+            $('restart-overlay').hidden = false;
+            waitForRestart();
+        }).catch(function (err) { show(msg, 'err', err.message); $('r-go').disabled = false; });
+    });
+    function waitForRestart() {
+        var tries = 0, wentDown = false;
+        (function poll() {
+            tries++;
+            fetch('/health', { cache: 'no-store' }).then(function (r) {
+                if (r.ok && (wentDown || tries > 8)) location.reload();
+                else setTimeout(poll, 1500);
+            }).catch(function () { wentDown = true; setTimeout(poll, 1500); });
+        })();
+    }
+
+    document.querySelectorAll('[data-close]').forEach(function (b) {
+        b.addEventListener('click', function () { b.closest('dialog').close(); });
+    });
+
+    // ---------------- status
+    var STATUS = { ok: 'OK', partial: 'Partly done', failed: 'Failed', running: 'Running' };
+    function renderStatus(s) {
+        state.status = s;
+        document.querySelectorAll('[data-run]').forEach(function (b) { b.disabled = s.running; });
+        var msg = $('run-msg');
+        if (s.running) show(msg, 'warn', 'Backup running…');
+        else if (!msg.hidden && msg.classList.contains('warn')) {
+            var last = s.runs[0];
+            if (last) show(msg, last.status === 'ok' ? 'ok' : 'err', last.message || '');
+        }
+        var lb = $('local-list');
+        lb.textContent = '';
+        lb.appendChild(chainList(s.local, 'local', 'No backups yet.'));
+        var tb = $('runs');
+        tb.textContent = '';
+        if (!s.runs.length) tb.appendChild(h('tr', {}, [h('td', { colspan: '4', class: 'msg', text: 'Nothing yet.' })]));
+        s.runs.forEach(function (r) {
+            var what = r.action === 'restore' ? 'Restore' : (r.kind === 'full' ? 'Full backup' : r.kind === 'incremental' ? 'Incremental backup' : 'Backup');
+            var trig = r.trigger === 'schedule' ? 'Scheduled' : 'Manual';
+            tb.appendChild(h('tr', {}, [
+                h('td', { 'data-no-i18n': '', text: when(r.started_at) }),
+                h('td', {}, [h('div', { text: what }), h('div', { class: 'item-meta', text: trig })]),
+                h('td', {}, [h('span', { class: 'status ' + r.status, text: STATUS[r.status] || r.status }), r.size ? h('div', { class: 'item-meta', 'data-no-i18n': '', text: size(r.size) }) : null]),
+                h('td', { class: 'msg', text: r.message || '' })
+            ]));
+        });
+        if (s.running) setTimeout(refresh, 2000);
+    }
+    function refresh() {
+        return api('GET', '/api/backup/status').then(function (s) {
+            renderStatus(s);
+            if (!s.running) loadDests();
+        });
+    }
+
+    api('GET', '/api/backup/settings').then(fillSettings);
+    loadDests();
+    refresh();
+})();
+</script>
+</body>
+</html>
