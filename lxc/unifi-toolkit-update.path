@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for UniFi Toolkit update requests from the web UI
+
+[Path]
+PathExists=/var/lib/unifi-toolkit/update-request
+Unit=unifi-toolkit-update.service
+
+[Install]
+WantedBy=multi-user.target

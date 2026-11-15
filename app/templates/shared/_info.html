@@ -1,0 +1,182 @@
+{# Info dialog: version, channel, update check and in-app update. Included by _sidebar.html. #}
+<dialog class="shell-dialog" id="shell-info" aria-labelledby="shell-info-title">
+    <div class="shell-dialog-head">
+        <img src="/brand/logo/rhis-icon.svg" alt="" width="40" height="40">
+        <div>
+            <h2 id="shell-info-title">UniFi Toolkit</h2>
+            <p class="shell-muted" id="si-version">Version …</p>
+        </div>
+        <button type="button" class="shell-icon-btn" data-close aria-label="Close">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z" transform="translate(1.4 0)"/></svg>
+        </button>
+    </div>
+
+    <dl class="shell-facts">
+        <div><dt>Channel</dt><dd id="si-channel">…</dd></div>
+        <div><dt>Commit</dt><dd id="si-commit">…</dd></div>
+        <div><dt>Mode</dt><dd id="si-mode">…</dd></div>
+        <div><dt>Python</dt><dd id="si-python">…</dd></div>
+    </dl>
+    <details class="shell-tools">
+        <summary>Tool versions</summary>
+        <ul id="si-tools"></ul>
+    </details>
+
+    <section class="shell-update">
+        <div class="shell-update-row">
+            <label for="si-target">Update channel</label>
+            <select id="si-target"></select>
+            <button type="button" class="shell-btn" id="si-check">Check for updates</button>
+        </div>
+        <div id="si-result" class="shell-update-result" hidden></div>
+        <ul id="si-changes" class="shell-changes" hidden></ul>
+        <div class="shell-update-row" id="si-actions" hidden>
+            <button type="button" class="shell-btn shell-btn-accent" id="si-update">Update now</button>
+            <span class="shell-muted" id="si-update-note"></span>
+        </div>
+        <div id="si-progress" class="shell-progress" hidden>
+            <p id="si-progress-msg"></p>
+            <pre id="si-log"></pre>
+        </div>
+        <p class="shell-muted" id="si-unavailable" hidden></p>
+    </section>
+</dialog>
+<script>
+(function () {
+    var dlg = document.getElementById('shell-info');
+    var $ = function (id) { return document.getElementById(id); };
+    var H = { 'X-Requested-With': 'XMLHttpRequest' };
+    var info = null, lastCheck = null, poll = null;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function getJSON(url) { return fetch(url, { headers: H }).then(function (r) { return r.json(); }); }
+
+    function renderInfo(d) {
+        info = d;
+        $('si-version').textContent = 'Version ' + d.app;
+        $('si-channel').textContent = d.channel ? (d.channel_label + ' (' + d.channel + ')') : 'Not a git install';
+        $('si-commit').textContent = d.commit ? d.commit + (d.commit_date ? ' · ' + new Date(d.commit_date).toLocaleDateString() : '') : '–';
+        $('si-mode').textContent = d.deployment === 'production' ? 'Production (login + HTTPS)' : 'Local';
+        $('si-python').textContent = d.python;
+        $('si-tools').innerHTML = Object.keys(d.tools).map(function (k) { return '<li><span>' + esc(k) + '</span><span>' + esc(d.tools[k]) + '</span></li>'; }).join('');
+        var sel = $('si-target');
+        sel.innerHTML = d.channels.map(function (c) {
+            return '<option value="' + c.id + '"' + (c.id === d.channel ? ' selected' : '') + '>' + esc(c.label) + ' (' + c.id + ')</option>';
+        }).join('');
+        $('si-unavailable').hidden = d.updater_available;
+        $('si-unavailable').textContent = d.updater_reason || '';
+        if (d.update && (d.update.state === 'running' || d.update.state === 'queued')) startPolling();
+    }
+
+    function setBadge(on) {
+        var dot = document.getElementById('shell-info-dot');
+        if (dot) dot.hidden = !on;
+    }
+
+    function check(refresh) {
+        var ch = $('si-target').value;
+        $('si-check').disabled = true;
+        $('si-check').textContent = 'Checking…';
+        return getJSON('/api/system/updates?channel=' + encodeURIComponent(ch) + (refresh ? '&refresh=1' : ''))
+            .then(function (d) {
+                lastCheck = d;
+                var box = $('si-result'); box.hidden = false;
+                var list = $('si-changes');
+                if (!d.checked) {
+                    box.className = 'shell-update-result is-warn';
+                    box.textContent = d.error;
+                    list.hidden = true; $('si-actions').hidden = true;
+                    return;
+                }
+                if (d.switching_channel) {
+                    box.className = 'shell-update-result is-info';
+                    box.textContent = 'Switching to ' + d.channel_label + ' installs version ' + (d.latest_version || d.latest_commit) + ' (' + d.latest_commit + ').';
+                } else if (d.update_available) {
+                    box.className = 'shell-update-result is-info';
+                    box.textContent = 'Update available: ' + d.commits_behind + ' new change' + (d.commits_behind === 1 ? '' : 's') +
+                        (d.latest_version && d.latest_version !== d.current_version ? ', version ' + d.latest_version : '') + '.';
+                } else {
+                    box.className = 'shell-update-result is-ok';
+                    box.textContent = 'You are up to date (' + d.current_commit + ').';
+                }
+                list.hidden = !d.changes.length;
+                list.innerHTML = d.changes.map(function (c) { return '<li><code>' + esc(c.commit) + '</code> ' + esc(c.subject) + '</li>'; }).join('');
+                $('si-actions').hidden = !(d.update_available && info && info.updater_available);
+                $('si-update').textContent = d.switching_channel ? 'Switch to ' + d.channel_label : 'Update now';
+                $('si-update-note').textContent = 'The toolkit restarts; this takes a minute or two.';
+                if (!d.switching_channel) setBadge(d.update_available);
+            })
+            .catch(function () {
+                $('si-result').hidden = false;
+                $('si-result').className = 'shell-update-result is-warn';
+                $('si-result').textContent = 'Could not check for updates.';
+            })
+            .finally(function () { $('si-check').disabled = false; $('si-check').textContent = 'Check for updates'; });
+    }
+
+    function startPolling() {
+        $('si-progress').hidden = false;
+        $('si-actions').hidden = true;
+        var sawDown = false;
+        clearInterval(poll);
+        poll = setInterval(function () {
+            getJSON('/api/system/update/status').then(function (s) {
+                $('si-progress-msg').textContent = s.message || s.state;
+                $('si-log').textContent = (s.log || []).join('\n');
+                if (s.state === 'success') {
+                    clearInterval(poll);
+                    $('si-progress-msg').textContent = s.message + '. Reloading…';
+                    setTimeout(function () { location.reload(); }, 1500);
+                } else if (s.state === 'failed' || s.state === 'rolled_back') {
+                    clearInterval(poll);
+                    $('si-progress').classList.add('is-warn');
+                }
+            }).catch(function () {
+                // The toolkit is restarting; keep polling.
+                sawDown = true;
+                $('si-progress-msg').textContent = 'Restarting…';
+            });
+        }, 2000);
+    }
+
+    $('si-check').addEventListener('click', function () { check(true); });
+    $('si-target').addEventListener('change', function () { check(false); });
+    $('si-update').addEventListener('click', function () {
+        if (!lastCheck) return;
+        var target = lastCheck.channel;
+        var msg = lastCheck.switching_channel
+            ? 'Switch this install to the ' + lastCheck.channel_label + ' channel and restart?'
+            : 'Install the update and restart the toolkit?';
+        if (!window.confirm(msg)) return;
+        fetch('/api/system/update', {
+            method: 'POST',
+            headers: Object.assign({ 'Content-Type': 'application/json' }, H),
+            body: JSON.stringify({ channel: target })
+        }).then(function (r) {
+            return r.json().then(function (d) {
+                if (!r.ok) throw new Error(d.detail || 'Update refused');
+                startPolling();
+            });
+        }).catch(function (e) {
+            $('si-result').hidden = false;
+            $('si-result').className = 'shell-update-result is-warn';
+            $('si-result').textContent = e.message;
+        });
+    });
+    dlg.querySelector('[data-close]').addEventListener('click', function () { dlg.close(); });
+    dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
+
+    window.shellOpenInfo = function () {
+        getJSON('/api/system/info').then(function (d) {
+            renderInfo(d);
+            dlg.showModal();
+            if (d.channel) check(false);
+        });
+    };
+
+    // Quiet background check so the menu can show a dot when an update is out.
+    setTimeout(function () {
+        getJSON('/api/system/updates').then(function (d) { setBadge(!!(d.checked && d.update_available && !d.switching_channel)); }).catch(function () {});
+    }, 4000);
+})();
+</script>

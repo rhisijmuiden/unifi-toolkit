@@ -4,6 +4,10 @@ All notable changes to UI Toolkit will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Info & updates in the menu.** Shows the version, channel, commit and tool versions, checks this repository for newer commits, lists what changed and installs it from the browser. You can switch between the Production (`main`) and Test (`test`) channels there. A root-owned systemd path unit runs `lxc/update.sh`, which restarts the toolkit and rolls back to the previous commit if the new version doesn't come up healthy. This replaces the old update badge, which checked Crosstalk's GitHub releases.
+- **RHIS house style** with a left admin menu on every page.
+
 ### Changed
 - **UI Toolkit now runs in an LXC container instead of Docker.** `lxc/create-ct.sh` creates a Debian container on a Proxmox VE host and installs the toolkit in it. `lxc/install.sh` installs or updates the toolkit in any Debian or Ubuntu container as the `unifi-toolkit` systemd service, with the app in `/opt/unifi-toolkit` and the database in `/var/lib/unifi-toolkit`. Production mode (`--domain`) adds HTTPS through a native Caddy. `lxc/migrate-from-docker.sh` moves the database and settings of an existing Docker install over.
 - `reset_password.sh` writes the password hash in single quotes instead of the `$$` escaping Docker Compose needed, and keeps the owner and mode of `.env`.

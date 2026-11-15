@@ -102,8 +102,11 @@ chmod 640 "$ENV_FILE"
 
 info "Installing systemd service"
 install -m 644 "$APP_DIR/lxc/unifi-toolkit.service" /etc/systemd/system/unifi-toolkit.service
+install -m 644 "$APP_DIR/lxc/unifi-toolkit-update.service" /etc/systemd/system/unifi-toolkit-update.service
+install -m 644 "$APP_DIR/lxc/unifi-toolkit-update.path" /etc/systemd/system/unifi-toolkit-update.path
 systemctl daemon-reload
 systemctl enable --quiet unifi-toolkit
+systemctl enable --quiet --now unifi-toolkit-update.path
 systemctl restart unifi-toolkit
 
 if [ -n "$DOMAIN" ]; then

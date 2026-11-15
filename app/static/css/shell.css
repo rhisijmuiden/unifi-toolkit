@@ -209,3 +209,59 @@ body.has-shell .header-center { text-align: left; flex: 1; }
 body.has-shell .header-center h1 { margin: 0; }
 /* Upstream's paid-support promo does not belong in the RHIS build. */
 body.has-shell .rs-help-btn { display: none !important; }
+
+/* ---------- Info & updates dialog ---------- */
+.shell-dot { width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--koraal); }
+.shell-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    height: fit-content;
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 48px);
+    padding: var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-lg);
+}
+.shell-dialog::backdrop { background: rgba(14, 22, 38, 0.5); }
+.shell-dialog-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.shell-dialog-head h2 { margin: 0; font-size: 20px; }
+.shell-dialog-head p { margin: 2px 0 0; }
+.shell-dialog-head .shell-icon-btn { margin-left: auto; }
+.shell-icon-btn { border: 0; background: transparent; color: var(--text-secondary); padding: 6px; border-radius: var(--radius-sm); cursor: pointer; }
+.shell-icon-btn:hover { background: var(--surface-sunken); color: var(--text-primary); }
+.shell-muted { color: var(--text-secondary); font-size: 13px; }
+.shell-facts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-3); }
+.shell-facts dt { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.shell-facts dd { margin: 2px 0 0; font-weight: 600; font-size: 14px; }
+.shell-tools { margin-bottom: var(--space-3); font-size: 14px; }
+.shell-tools summary { cursor: pointer; color: var(--text-secondary); }
+.shell-tools ul { list-style: none; padding: 0; margin: var(--space-2) 0 0; }
+.shell-tools li { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border-color); }
+.shell-update { border-top: 1px solid var(--border-color); padding-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.shell-update-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.shell-update-row label { font-size: 13px; color: var(--text-secondary); }
+.shell-update-row select {
+    padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);
+    background: var(--surface); color: var(--text-primary); font-size: 14px;
+}
+.shell-btn {
+    padding: 8px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);
+    background: var(--surface-sunken); color: var(--text-primary); font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.shell-btn:hover { border-color: var(--text-secondary); }
+.shell-btn:disabled { opacity: 0.6; cursor: wait; }
+.shell-btn-accent { background: var(--koraal); border-color: var(--koraal); color: var(--nacht); }
+.shell-btn-accent:hover { filter: brightness(0.95); border-color: var(--koraal); }
+.shell-update-result { padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; border: 1px solid var(--border-color); }
+.shell-update-result.is-ok { border-color: var(--status-online); }
+.shell-update-result.is-info { border-color: var(--info); }
+.shell-update-result.is-warn, .shell-progress.is-warn { border-color: var(--status-warning); }
+.shell-changes { margin: 0; padding-left: 18px; font-size: 13px; max-height: 160px; overflow: auto; }
+.shell-changes code { color: var(--text-secondary); }
+.shell-progress { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 10px 12px; }
+.shell-progress p { margin: 0 0 6px; font-weight: 600; }
+.shell-progress pre { margin: 0; max-height: 160px; overflow: auto; font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; }

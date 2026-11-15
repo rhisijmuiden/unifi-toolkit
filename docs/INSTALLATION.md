@@ -112,6 +112,16 @@ Click **Test Connection** to check it.
 | Switch to the test channel | `bash /opt/unifi-toolkit/lxc/install.sh --branch test` |
 | Reset admin password | `cd /opt/unifi-toolkit && ./reset_password.sh && systemctl restart unifi-toolkit` |
 
+### Updating from the web UI
+
+Open **Info & updates** at the bottom of the left menu. It shows the running version, channel and commit, checks GitHub for newer commits, lists what changed and installs them with **Update now**. A coloured dot next to the menu item means an update is waiting.
+
+There are two channels: **Production** (`main`) and **Test** (`test`). Pick the other channel in the same dialog to switch this install over.
+
+The app never updates itself. It writes the request to `/var/lib/unifi-toolkit/update-request`, and the root-owned `unifi-toolkit-update.path` unit runs `lxc/update.sh`. That script checks out the newest commit of the channel, installs the Python packages and restarts the service. If the new version doesn't stay healthy for a few seconds, it goes back to the previous commit and the dialog says so. The log is in `/var/lib/unifi-toolkit/update.log`.
+
+Installs made before this feature need `bash /opt/unifi-toolkit/lxc/install.sh` once to add the updater units.
+
 Running `install.sh` again updates the checkout, the Python packages and the database schema, and keeps `.env` and the database. From the Proxmox host you can run any of these with `pct exec <ctid> -- <command>`.
 
 Back up the container with Proxmox (`vzdump`) or at least copy `/opt/unifi-toolkit/.env` and `/var/lib/unifi-toolkit/`.

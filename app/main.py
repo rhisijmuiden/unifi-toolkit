@@ -29,6 +29,7 @@ from tools.house_arrest.main import create_app as create_arrest_app
 # Import authentication router and middleware
 from app.routers.auth import router as auth_router, AuthMiddleware, is_auth_enabled, verify_session
 from app.routers.config import router as config_router
+from app.routers.system import router as system_router
 
 # Configure logging - respect LOG_LEVEL from environment
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -282,6 +283,7 @@ app.include_router(auth_router)
 
 # Include configuration router
 app.include_router(config_router)
+app.include_router(system_router)
 
 # Mount Wi-Fi Stalker sub-application
 stalker_app = create_stalker_app()
@@ -416,52 +418,6 @@ async def get_debug_info():
     }
 
     return debug_info
-
-
-@app.get("/api/update-check")
-async def check_for_update():
-    """Check if a newer version is available on GitHub."""
-    import aiohttp
-    from app import __version__ as app_version
-    from shared import cache
-
-    cached = cache.get_update_check()
-    if cached is not None:
-        return cached
-
-    result = {
-        "update_available": False,
-        "current_version": app_version
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://api.github.com/repos/Crosstalk-Solutions/unifi-toolkit/releases/latest",
-                headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "UniFi-Toolkit"},
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    tag = data.get("tag_name", "")
-                    latest = tag.lstrip("v")
-                    result["latest_version"] = latest
-                    result["release_url"] = data.get("html_url", "")
-
-                    try:
-                        current_parts = tuple(int(x) for x in app_version.split("."))
-                        latest_parts = tuple(int(x) for x in latest.split("."))
-                        result["update_available"] = latest_parts > current_parts
-                    except (ValueError, AttributeError):
-                        pass
-                else:
-                    result["error"] = f"GitHub API returned {resp.status}"
-    except Exception as e:
-        logger.warning(f"Update check failed: {e}")
-        result["error"] = "Unable to check for updates"
-
-    cache.set_update_check(result)
-    return result
 
 
 @app.get("/api/system-status")
