@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail server · UniFi Toolkit</title>
+    <script>
+        document.documentElement.setAttribute('data-theme', (function () {
+            try { return localStorage.getItem('unifi-toolkit-theme') || 'light'; } catch (e) { return 'light'; }
+        })());
+    </script>
+    {% include "_brand_head.html" %}
+    <link rel="stylesheet" href="/static/css/admin.css?v=2">
+</head>
+<body class="has-shell admin-page">
+{% set nav_active = "mail" %}
+{% include "_sidebar.html" %}
+<main class="admin-main">
+    <header class="admin-header">
+        <div>
+            <p class="admin-eyebrow">System</p>
+            <h1>Mail server</h1>
+            <p>The SMTP server the toolkit sends alerts and reports through.</p>
+        </div>
+        <span class="pill" id="mail-state">Off</span>
+    </header>
+
+    <form id="mail-form" novalidate>
+        <section class="admin-card">
+            <label class="switch">
+                <input type="checkbox" name="enabled">
+                <span class="track"></span>
+                <span>Send mail</span>
+            </label>
+        </section>
+
+        <section class="admin-card">
+            <h2>Server</h2>
+            <p class="admin-sub">Most providers use port 587 with STARTTLS, or port 465 with SSL/TLS.</p>
+            <div class="admin-grid">
+                <div class="field">
+                    <label for="host">SMTP server</label>
+                    <input type="text" id="host" name="host" autocomplete="off" spellcheck="false" aria-describedby="host-hint">
+                    <small id="host-hint">For example smtp.example.com</small>
+                </div>
+                <div class="field">
+                    <label for="port">Port</label>
+                    <input type="number" id="port" name="port" min="1" max="65535">
+                </div>
+                <div class="field span-2">
+                    <label id="security-label">Security</label>
+                    <div class="segmented" role="radiogroup" aria-labelledby="security-label">
+                        <label><input type="radio" name="security" value="starttls"><span>STARTTLS</span></label>
+                        <label><input type="radio" name="security" value="ssl"><span>SSL/TLS</span></label>
+                        <label><input type="radio" name="security" value="none"><span>None</span></label>
+                    </div>
+                    <small id="security-hint"></small>
+                </div>
+                <div class="field span-2">
+                    <label class="switch">
+                        <input type="checkbox" name="verify_tls">
+                        <span class="track"></span>
+                        <span>Check the server's certificate</span>
+                    </label>
+                    <small>Turn this off only for a server with a self-signed certificate on your own network.</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="admin-card">
+            <h2>Login</h2>
+            <p class="admin-sub">Leave the username empty for a relay that does not need a login.</p>
+            <div class="admin-grid">
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" autocomplete="new-password" aria-describedby="password-hint">
+                    <small id="password-hint">Stored encrypted.</small>
+                </div>
+            </div>
+        </section>
+
+        <section class="admin-card">
+            <h2>Sender and recipients</h2>
+            <p class="admin-sub">Alerts and reports go to the default recipients.</p>
+            <div class="admin-grid">
+                <div class="field">
+                    <label for="from_address">From address</label>
+                    <input type="email" id="from_address" name="from_address" spellcheck="false">
+                </div>
+                <div class="field">
+                    <label for="from_name">From name</label>
+                    <input type="text" id="from_name" name="from_name">
+                </div>
+                <div class="field">
+                    <label for="reply_to">Reply-to address</label>
+                    <input type="email" id="reply_to" name="reply_to" spellcheck="false" aria-describedby="reply-hint">
+                    <small id="reply-hint">Optional.</small>
+                </div>
+                <div class="field">
+                    <label for="timeout">Timeout (seconds)</label>
+                    <input type="number" id="timeout" name="timeout" min="3" max="120">
+                </div>
+                <div class="field span-2">
+                    <label for="default_recipients">Default recipients</label>
+                    <input type="text" id="default_recipients" name="default_recipients" spellcheck="false" aria-describedby="rcpt-hint">
+                    <small id="rcpt-hint">Separate addresses with a comma.</small>
+                </div>
+            </div>
+            <div class="btn-row" style="margin-top: var(--space-4)">
+                <button type="submit" class="btn btn-primary" id="save-btn">Save</button>
+            </div>
+            <div class="notice" id="save-msg" role="status" hidden></div>
+        </section>
+    </form>
+
+    <section class="admin-card">
+        <h2>Send a test message</h2>
+        <p class="admin-sub">Sends with the saved settings. Save your changes first.</p>
+        <div class="admin-grid">
+            <div class="field span-2">
+                <label for="test-to">Send to</label>
+                <input type="text" id="test-to" spellcheck="false" aria-describedby="test-hint">
+                <small id="test-hint">Leave empty to use the default recipients.</small>
+            </div>
+        </div>
+        <div class="btn-row" style="margin-top: var(--space-3)">
+            <button type="button" class="btn btn-ghost" id="test-btn">Send test message</button>
+        </div>
+        <div class="notice" id="test-msg" role="status" hidden></div>
+    </section>
+</main>
+<script>
+(function () {
+    var form = document.getElementById('mail-form');
+    var hasPassword = false;
+    var T = function (s) { return window.toolkitLang ? window.toolkitLang.t(s) : s; };
+    var hints = {
+        starttls: 'Connects in plain text, then upgrades to TLS. Usually port 587.',
+        ssl: 'TLS from the first byte. Usually port 465.',
+        none: 'No encryption. Only for a relay on your own network, without a login. Usually port 25.'
+    };
+    var ports = { starttls: 587, ssl: 465, none: 25 };
+
+    function show(el, kind, text) {
+        el.hidden = false;
+        el.className = 'notice ' + kind;
+        el.textContent = text;
+    }
+    function api(method, url, body) {
+        return fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body ? JSON.stringify(body) : undefined
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                if (!r.ok) {
+                    var d = data.detail;
+                    if (Array.isArray(d)) d = d.map(function (x) { return x.msg; }).join(' ');
+                    throw new Error(d || ('HTTP ' + r.status));
+                }
+                return data;
+            });
+        });
+    }
+    function securityHint() {
+        var s = form.querySelector('input[name=security]:checked');
+        document.getElementById('security-hint').textContent = s ? hints[s.value] : '';
+    }
+    function state(s) {
+        var pill = document.getElementById('mail-state');
+        var on = s.enabled && s.host && s.from_address;
+        pill.className = 'pill ' + (on ? 'ok' : (s.enabled ? 'warn' : ''));
+        pill.textContent = on ? 'On' : (s.enabled ? 'Incomplete' : 'Off');
+    }
+    function fill(s) {
+        form.enabled.checked = s.enabled;
+        form.host.value = s.host;
+        form.port.value = s.port;
+        (form.querySelector('input[name=security][value="' + s.security + '"]') || {}).checked = true;
+        form.verify_tls.checked = s.verify_tls;
+        form.username.value = s.username;
+        form.password.value = '';
+        hasPassword = s.has_password;
+        document.getElementById('password-hint').textContent =
+            hasPassword ? 'A password is saved. Leave empty to keep it.' : 'Stored encrypted.';
+        form.from_address.value = s.from_address;
+        form.from_name.value = s.from_name;
+        form.reply_to.value = s.reply_to;
+        form.timeout.value = s.timeout;
+        form.default_recipients.value = s.default_recipients;
+        securityHint();
+        state(s);
+    }
+
+    form.querySelectorAll('input[name=security]').forEach(function (r) {
+        r.addEventListener('change', function () {
+            var cur = parseInt(form.port.value, 10);
+            if (!cur || [25, 465, 587].indexOf(cur) !== -1) form.port.value = ports[r.value];
+            securityHint();
+        });
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var btn = document.getElementById('save-btn');
+        var msg = document.getElementById('save-msg');
+        var sec = form.querySelector('input[name=security]:checked');
+        btn.disabled = true;
+        api('PUT', '/api/mail/settings', {
+            enabled: form.enabled.checked,
+            host: form.host.value.trim(),
+            port: parseInt(form.port.value, 10) || 587,
+            security: sec ? sec.value : 'starttls',
+            verify_tls: form.verify_tls.checked,
+            username: form.username.value.trim(),
+            password: form.password.value || null,
+            from_address: form.from_address.value.trim(),
+            from_name: form.from_name.value.trim(),
+            reply_to: form.reply_to.value.trim(),
+            default_recipients: form.default_recipients.value,
+            timeout: parseInt(form.timeout.value, 10) || 20
+        }).then(function (s) {
+            fill(s);
+            show(msg, 'ok', 'Settings saved.');
+        }).catch(function (err) {
+            show(msg, 'err', err.message);
+        }).then(function () { btn.disabled = false; });
+    });
+
+    document.getElementById('test-btn').addEventListener('click', function () {
+        var btn = this;
+        var msg = document.getElementById('test-msg');
+        btn.disabled = true;
+        show(msg, 'warn', 'Sending…');
+        api('POST', '/api/mail/test', { to: document.getElementById('test-to').value })
+            .then(function (r) { show(msg, 'ok', 'Test message sent to ' + r.to.join(', ') + '.'); })
+            .catch(function (err) { show(msg, 'err', err.message); })
+            .then(function () { btn.disabled = false; });
+    });
+
+    api('GET', '/api/mail/settings').then(fill).catch(function (err) {
+        show(document.getElementById('save-msg'), 'err', err.message);
+    });
+})();
+</script>
+</body>
+</html>

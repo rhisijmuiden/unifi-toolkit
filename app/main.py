@@ -30,6 +30,7 @@ from tools.house_arrest.main import create_app as create_arrest_app
 from app.routers.auth import router as auth_router, AuthMiddleware, is_auth_enabled, verify_session
 from app.routers.config import router as config_router
 from app.routers.system import router as system_router
+from app.routers.mail import router as mail_router
 
 # Configure logging - respect LOG_LEVEL from environment
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -284,6 +285,7 @@ app.include_router(auth_router)
 # Include configuration router
 app.include_router(config_router)
 app.include_router(system_router)
+app.include_router(mail_router)
 
 # Mount Wi-Fi Stalker sub-application
 stalker_app = create_stalker_app()

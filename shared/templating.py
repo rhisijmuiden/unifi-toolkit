@@ -22,6 +22,11 @@ NAV_ITEMS = [
     ("arrest", "House Arrest", "/arrest/"),
 ]
 
+# System administration pages, shown as a second group: (key, label, url)
+SYSTEM_NAV_ITEMS = [
+    ("mail", "Mail server", "/system/mail"),
+]
+
 
 def _auth_enabled() -> bool:
     return os.getenv("DEPLOYMENT_TYPE", "local").lower() == "production"
@@ -34,5 +39,6 @@ def make_templates(directory) -> Jinja2Templates:
         FileSystemLoader(str(SHARED_TEMPLATES)),
     ])
     templates.env.globals["nav_items"] = NAV_ITEMS
+    templates.env.globals["system_nav_items"] = SYSTEM_NAV_ITEMS
     templates.env.globals["shell_auth_enabled"] = _auth_enabled
     return templates
