@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alerts · UniFi Toolkit</title>
+    <script>
+        document.documentElement.setAttribute('data-theme', (function () {
+            try { return localStorage.getItem('unifi-toolkit-theme') || 'light'; } catch (e) { return 'light'; }
+        })());
+    </script>
+    {% include "_brand_head.html" %}
+    <link rel="stylesheet" href="/static/css/admin.css?v=4">
+</head>
+<body class="has-shell admin-page">
+{% set nav_active = "alerts" %}
+{% include "_sidebar.html" %}
+<main class="admin-main">
+    <header class="admin-header">
+        <div>
+            <p class="admin-eyebrow">System</p>
+            <h1>Alerts</h1>
+            <p>Mail when something needs your attention, and a short report every week.</p>
+        </div>
+    </header>
+
+    <div class="notice warn" id="mail-missing" hidden>
+        Mail is not set up yet, so alerts can't be sent. <a href="/system/mail">Set up the mail server</a>.
+    </div>
+
+    <form id="alerts-form" novalidate>
+        <section class="admin-card">
+            <h2>Mail me when</h2>
+            <p class="admin-sub">The toolkit checks every minute.</p>
+            <div class="item-list">
+                <div class="item">
+                    <div class="item-main">
+                        <label class="switch"><input type="checkbox" name="unknown_device_enabled"><span class="track"></span><span>A new device joins the network</span></label>
+                        <div class="item-meta">A MAC address the toolkit has never seen. Devices already on the network when the toolkit started watching count as known.</div>
+                    </div>
+                </div>
+                <div class="item">
+                    <div class="item-main">
+                        <label class="switch"><input type="checkbox" name="threat_enabled"><span class="track"></span><span>Threat Watch records a threat</span></label>
+                        <div class="item-meta">Ignored events are left out.</div>
+                    </div>
+                    <div class="field" style="min-width: 200px">
+                        <label for="threat_min_severity">At least</label>
+                        <select id="threat_min_severity" name="threat_min_severity">
+                            <option value="1">High</option>
+                            <option value="2">Medium or high</option>
+                            <option value="3">Any severity</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="item">
+                    <div class="item-main">
+                        <label class="switch"><input type="checkbox" name="console_enabled"><span class="track"></span><span>The UniFi console can't be reached</span></label>
+                        <div class="item-meta">After 5 minutes, with the reason. A second mail follows when it is back.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="field" style="margin-top: var(--space-3)">
+                <label for="recipients">Recipients</label>
+                <input type="text" id="recipients" name="recipients" spellcheck="false" aria-describedby="rcpt-hint">
+                <small id="rcpt-hint">Separate addresses with a comma. Leave empty to use the mail server's default recipients.</small>
+            </div>
+        </section>
+
+        <section class="admin-card">
+            <h2>Weekly report</h2>
+            <p class="admin-sub">Clients online, new devices, threats and backups of the past 7 days.</p>
+            <div class="admin-grid">
+                <div class="field span-2">
+                    <label class="switch"><input type="checkbox" name="report_enabled"><span class="track"></span><span>Send the weekly report</span></label>
+                </div>
+                <div class="field">
+                    <label for="report_weekday">Day</label>
+                    <select id="report_weekday" name="report_weekday">
+                        <option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option>
+                        <option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option>
+                        <option value="6">Sunday</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="report_time">Time</label>
+                    <input type="text" id="report_time" name="report_time" inputmode="numeric" maxlength="5" aria-describedby="rt-hint">
+                    <small id="rt-hint">24-hour clock, for example 08:00.</small>
+                </div>
+            </div>
+            <div class="btn-row" style="margin-top: var(--space-4)">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <a class="btn btn-ghost" href="/api/alerts/report-preview" target="_blank" rel="noopener">Preview report</a>
+                <button type="button" class="btn btn-ghost" id="send-report">Send report now</button>
+            </div>
+            <div class="notice" id="save-msg" role="status" hidden></div>
+        </section>
+    </form>
+
+    <section class="admin-card">
+        <div class="card-head">
+            <div>
+                <h2>New devices</h2>
+                <p class="admin-sub" id="dev-sub">Devices first seen in the last 30 days.</p>
+            </div>
+        </div>
+        <div class="item-list" id="devices"></div>
+    </section>
+
+    <section class="admin-card">
+        <h2>Sent alerts</h2>
+        <div class="table-wrap">
+            <table class="admin-table">
+                <thead><tr><th>Time</th><th>Alert</th><th>Result</th></tr></thead>
+                <tbody id="log"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<script>
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var form = $('alerts-form');
+    function h(tag, attrs, kids) {
+        var el = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+            if (k === 'text') el.textContent = attrs[k];
+            else if (k === 'on') Object.keys(attrs.on).forEach(function (ev) { el.addEventListener(ev, attrs.on[ev]); });
+            else if (attrs[k] !== null && attrs[k] !== undefined && attrs[k] !== false) el.setAttribute(k, attrs[k]);
+        });
+        (kids || []).forEach(function (c) { if (c) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return el;
+    }
+    function show(el, kind, text) { el.hidden = false; el.className = 'notice ' + kind; el.textContent = text; }
+    function api(method, url, body) {
+        return fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body ? JSON.stringify(body) : undefined
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                if (!r.ok) {
+                    var d = data.detail;
+                    if (Array.isArray(d)) d = d.map(function (x) { return x.msg; }).join(' ');
+                    throw new Error(d || ('HTTP ' + r.status));
+                }
+                return data;
+            });
+        });
+    }
+    function when(iso) {
+        if (!iso) return '';
+        var lang = (window.toolkitLang && window.toolkitLang.current === 'nl') ? 'nl-NL' : 'en-GB';
+        return new Date(iso).toLocaleString(lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function fill(s) {
+        ['unknown_device_enabled', 'threat_enabled', 'console_enabled', 'report_enabled'].forEach(function (k) { form[k].checked = s[k]; });
+        form.threat_min_severity.value = String(s.threat_min_severity);
+        form.report_weekday.value = String(s.report_weekday);
+        form.report_time.value = s.report_time;
+        form.recipients.value = s.recipients;
+        $('mail-missing').hidden = s.mail_ready;
+    }
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        api('PUT', '/api/alerts/settings', {
+            recipients: form.recipients.value,
+            unknown_device_enabled: form.unknown_device_enabled.checked,
+            threat_enabled: form.threat_enabled.checked,
+            threat_min_severity: parseInt(form.threat_min_severity.value, 10),
+            console_enabled: form.console_enabled.checked,
+            report_enabled: form.report_enabled.checked,
+            report_weekday: parseInt(form.report_weekday.value, 10),
+            report_time: form.report_time.value.trim()
+        }).then(function (s) { fill(s); show($('save-msg'), 'ok', 'Settings saved.'); })
+          .catch(function (err) { show($('save-msg'), 'err', err.message); });
+    });
+    $('send-report').addEventListener('click', function () {
+        var b = this; b.disabled = true;
+        show($('save-msg'), 'warn', 'Sending…');
+        api('POST', '/api/alerts/test-report')
+            .then(function () { show($('save-msg'), 'ok', 'Report sent.'); loadLog(); })
+            .catch(function (err) { show($('save-msg'), 'err', err.message); loadLog(); })
+            .then(function () { b.disabled = false; });
+    });
+
+    function loadDevices() {
+        api('GET', '/api/alerts/devices?days=30').then(function (r) {
+            $('dev-sub').textContent = 'Devices first seen in the last 30 days. The toolkit knows ' + r.known + ' device(s) in total.';
+            var box = $('devices'); box.textContent = '';
+            if (!r.new.length) { box.appendChild(h('div', { class: 'empty', text: 'No new devices in the last 30 days.' })); return; }
+            r.new.forEach(function (d) {
+                var label = d.name || d.hostname || d.vendor || d.mac;
+                var where = d.is_wired ? 'Wired' : (d.essid || '');
+                box.appendChild(h('div', { class: 'item' }, [
+                    h('div', { class: 'item-main' }, [
+                        h('div', { class: 'item-title' }, [h('span', { 'data-no-i18n': '', text: label }),
+                            d.approved ? h('span', { class: 'tag', text: 'Known' }) : h('span', { class: 'tag full', text: 'New' })]),
+                        h('div', { class: 'item-meta', 'data-no-i18n': '' }, [[d.mac, d.ip, d.network, d.vendor].filter(Boolean).join(' · ')]),
+                        h('div', { class: 'item-meta' }, [h('span', { text: 'First seen' }), h('span', { 'data-no-i18n': '', text: ' ' + when(d.first_seen) + (where ? ' · ' : '') }), where ? h('span', { text: where }) : null])
+                    ]),
+                    h('div', { class: 'item-actions' }, [
+                        h('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: d.approved ? 'Mark as new' : 'Mark as known', on: { click: function () {
+                            api('POST', '/api/alerts/devices/' + encodeURIComponent(d.mac) + '/approve', { approved: !d.approved }).then(loadDevices);
+                        } } })
+                    ])
+                ]));
+            });
+        });
+    }
+    var KINDS = { unknown_device: 'New device', threat: 'Threat', console_down: 'Console unreachable', console_up: 'Console back', report: 'Weekly report', test: 'Report (sent by hand)' };
+    function loadLog() {
+        api('GET', '/api/alerts/log').then(function (rows) {
+            var tb = $('log'); tb.textContent = '';
+            if (!rows.length) tb.appendChild(h('tr', {}, [h('td', { colspan: '3', class: 'msg', text: 'Nothing sent yet.' })]));
+            rows.forEach(function (r) {
+                tb.appendChild(h('tr', {}, [
+                    h('td', { 'data-no-i18n': '', text: when(r.created_at) }),
+                    h('td', {}, [h('div', { text: KINDS[r.kind] || r.kind }), h('div', { class: 'item-meta', 'data-no-i18n': '', text: r.subject })]),
+                    h('td', { class: 'msg' }, [h('span', { class: 'status ' + (r.sent ? 'ok' : 'failed'), text: r.sent ? 'Sent' : 'Not sent' }), r.error ? h('div', { text: r.error }) : null])
+                ]));
+            });
+        });
+    }
+    api('GET', '/api/alerts/settings').then(fill);
+    loadDevices();
+    loadLog();
+})();
+</script>
+</body>
+</html>

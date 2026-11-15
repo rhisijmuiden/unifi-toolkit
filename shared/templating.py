@@ -24,6 +24,7 @@ NAV_ITEMS = [
 
 # System administration pages, shown as a second group: (key, label, url)
 SYSTEM_NAV_ITEMS = [
+    ("alerts", "Alerts", "/system/alerts"),
     ("mail", "Mail server", "/system/mail"),
     ("backups", "Backups", "/system/backups"),
 ]

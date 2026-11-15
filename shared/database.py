@@ -58,6 +58,7 @@ class Database:
         from shared.models.unifi_config import UniFiConfig
         from shared.models.mail_settings import MailSettings  # noqa: F401
         from shared.models.backup import BackupDestination, BackupRun, BackupSettings  # noqa: F401
+        from shared.models.alerts import AlertLog, AlertSettings, KnownDevice  # noqa: F401
         # Tool models will be imported by their respective tools
 
         # Create all tables
