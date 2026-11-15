@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.templating import Jinja2Templates
+from shared.templating import make_templates
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # Template directory for main dashboard
 BASE_DIR = Path(__file__).parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates = make_templates(str(BASE_DIR / "templates"))
 
 
 def run_migrations():
@@ -300,6 +301,8 @@ app.mount("/arrest", arrest_app)
 
 # Mount main app static files (for dashboard)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+# RHIS house style: logo, tokens and font (see branding/)
+app.mount("/brand", StaticFiles(directory=str(BASE_DIR.parent / "branding")), name="brand")
 
 
 @app.get("/", response_class=HTMLResponse)
