@@ -46,7 +46,7 @@ pct status "$CTID" >/dev/null 2>&1 && die "Container $CTID already exists."
 info "Looking for the newest Debian template"
 pveam update >/dev/null || true
 TEMPLATE=$(pveam available --section system | awk '{print $2}' \
-    | grep -E '^debian-(13|12)-standard_' | sort -V | tail -n 1)
+    | grep -E '^debian-(13|12)-standard_' | grep "_$(dpkg --print-architecture)\." | sort -V | tail -n 1)
 [ -n "$TEMPLATE" ] || die "No Debian 12/13 template found in 'pveam available'."
 if ! pveam list "$TEMPLATE_STORAGE" | grep -q "$TEMPLATE"; then
     info "Downloading $TEMPLATE to $TEMPLATE_STORAGE"

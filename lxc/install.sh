@@ -38,6 +38,7 @@ die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 command -v apt-get >/dev/null || die "This installer supports Debian and Ubuntu only."
 
 export DEBIAN_FRONTEND=noninteractive
+export LC_ALL=C.UTF-8 LANG=C.UTF-8
 
 info "Installing system packages"
 apt-get update -qq
