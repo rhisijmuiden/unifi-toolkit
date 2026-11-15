@@ -1,0 +1,25 @@
+# UniFi Toolkit - Caddy configuration for the LXC install.
+# lxc/install.sh fills in {$DOMAIN} and {$APP_PORT} and writes /etc/caddy/Caddyfile.
+
+{$DOMAIN} {
+    reverse_proxy 127.0.0.1:{$APP_PORT} {
+        health_uri /health
+        health_interval 30s
+        health_timeout 5s
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+
+    encode gzip zstd
+
+    log {
+        output file /var/log/caddy/unifi-toolkit.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format json
+    }
+}

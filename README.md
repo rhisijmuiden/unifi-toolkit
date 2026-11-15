@@ -67,50 +67,23 @@ Real-time network monitoring dashboard.
 
 ## Quick Start
 
+UI Toolkit runs as a native service in a Debian LXC container on Proxmox VE.
+
 ### Requirements
-- **Docker** (recommended) or Python 3.9+
-- **Ubuntu 22.04/24.04** (or other Linux)
-- **UniFi OS** controller (UDM, UCG, Cloud Key Gen2+). Standalone/self-hosted controllers are not supported as of v1.11.0
+- **Proxmox VE** host (or any Debian 12/13 or Ubuntu 22.04+ machine or container)
+- **UniFi OS** controller (UDM, UCG, Cloud Key Gen2+). Standalone/self-hosted controllers are not supported
 
-### Local Deployment (LAN Only)
+### Create the container
 
-No authentication, access via `http://localhost:8000`
-
-**Prerequisites:** Install Docker first - see [docs/INSTALLATION.md](docs/INSTALLATION.md#option-a-docker-installation-recommended)
+Run as root in the Proxmox host shell:
 
 ```bash
-# Clone and setup
-git clone https://github.com/Crosstalk-Solutions/unifi-toolkit.git
-cd unifi-toolkit
-./setup.sh  # Select 1 for Local
-
-# Start
-docker compose up -d
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/rhisijmuiden/unifi-toolkit/main/lxc/create-ct.sh)"
 ```
 
-Access at **http://localhost:8000**
+This creates a Debian container, installs the toolkit as the `unifi-toolkit` systemd service and prints the URL (**http://&lt;container-ip&gt;:8000**). Add `DOMAIN=toolkit.example.com` in front of the command for production mode with login and HTTPS via Caddy.
 
-### Production Deployment (Internet-Facing)
-
-Authentication enabled, HTTPS with Let's Encrypt via Caddy
-
-**Prerequisites:** Install Docker first - see [docs/INSTALLATION.md](docs/INSTALLATION.md#option-a-docker-installation-recommended)
-
-```bash
-# Clone and setup
-git clone https://github.com/Crosstalk-Solutions/unifi-toolkit.git
-cd unifi-toolkit
-./setup.sh  # Select 2 for Production
-# Enter: domain name, admin username, password
-
-# Open firewall ports
-sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
-
-# Start with HTTPS
-docker compose --profile production up -d
-```
-
-Access at **https://your-domain.com**
+Already running the Docker version? See [Moving over from a Docker install](docs/INSTALLATION.md#3-moving-over-from-a-docker-install).
 
 ---
 
@@ -118,60 +91,40 @@ Access at **https://your-domain.com**
 
 | Guide | Description |
 |-------|-------------|
-| [INSTALLATION.md](docs/INSTALLATION.md) | Complete installation guide with troubleshooting |
-| [SYNOLOGY.md](docs/SYNOLOGY.md) | Synology NAS Container Manager setup |
-| [QNAP Guide](https://github.com/Crosstalk-Solutions/unifi-toolkit/issues/29) | QNAP Container Station setup (community) |
-| [Unraid Guide](docs/UNRAID.md) | Unraid Community apps Setup |
-| [QUICKSTART.md](docs/QUICKSTART.md) | 5-minute quick start reference |
+| [INSTALLATION.md](docs/INSTALLATION.md) | LXC installation, migration from Docker, service management and troubleshooting |
 | [HOUSE-ARREST.md](docs/HOUSE-ARREST.md) | House Arrest guide: lockdowns, DNS control, and measured limitations |
 
 ---
 
 ## Common Commands
 
+Inside the container:
+
 | Action | Command |
 |--------|---------|
-| Start (local) | `docker compose up -d` |
-| Start (production) | `docker compose --profile production up -d` |
-| Stop | `docker compose down` |
-| View logs | `docker compose logs -f` |
-| Restart | `docker compose restart` |
-| Reset password | `./reset_password.sh` |
-| Update | `./upgrade.sh` |
-
-Images are published to both GHCR (`ghcr.io/crosstalk-solutions/unifi-toolkit`) and Docker Hub (`crosstalksolutions/unifi-toolkit`), and they are identical. `:latest` is the release channel and only moves on tagged releases. `:edge` is the beta channel, rebuilt on every merge. See [Running the beta channel](docs/INSTALLATION.md#running-the-beta-edge-channel).
+| Status | `systemctl status unifi-toolkit` |
+| View logs | `journalctl -u unifi-toolkit -f` |
+| Restart | `systemctl restart unifi-toolkit` |
+| Update | `bash /opt/unifi-toolkit/lxc/install.sh` |
+| Reset password | `cd /opt/unifi-toolkit && ./reset_password.sh` |
 
 ---
 
 ## Configuration
 
-### Setup Wizard (Recommended)
+### Installer
 
-Run the interactive setup wizard:
-
-```bash
-./setup.sh
-```
-
-The wizard will:
-- Generate encryption key
-- Configure deployment mode (local/production)
-- Set up authentication (production only)
-- Create your `.env` file
+`lxc/install.sh` writes `/opt/unifi-toolkit/.env` on the first install: it generates the encryption key, sets the deployment mode (local, or production when you pass `--domain`) and, in production mode, creates the admin login. Edit `.env` afterwards for anything else and run `systemctl restart unifi-toolkit`.
 
 ### Manual Configuration
 
-Copy and edit the example configuration:
-
-```bash
-cp .env.example .env
-```
+The configuration lives in `/opt/unifi-toolkit/.env` (see `.env.example` for every option). Restart the service after a change.
 
 #### Required Settings
 
 | Variable | Description |
 |----------|-------------|
-| `ENCRYPTION_KEY` | Encrypts stored credentials (auto-generated by setup wizard) |
+| `ENCRYPTION_KEY` | Encrypts stored credentials (generated by the installer) |
 
 #### Deployment Settings (Production Only)
 
@@ -180,7 +133,7 @@ cp .env.example .env
 | `DEPLOYMENT_TYPE` | `local` or `production` |
 | `DOMAIN` | The full hostname you use to reach the toolkit (e.g., `toolkit.example.com`, not `example.com`). Production mode uses it for the HTTPS certificate. Every mode also accepts requests addressed to it, so set it if a local-mode toolkit sits behind a reverse proxy. |
 | `AUTH_USERNAME` | Admin username |
-| `AUTH_PASSWORD_HASH` | Bcrypt password hash (generated by setup wizard) |
+| `AUTH_PASSWORD_HASH` | Bcrypt password hash (generated by the installer, or `./reset_password.sh`) |
 
 #### UniFi Controller Settings
 
@@ -261,7 +214,7 @@ Never expose UniFi controllers via port forwarding
 ### Let's Encrypt certificate fails
 - Verify DNS A record points to your server
 - Ensure ports 80 and 443 are open
-- Check Caddy logs: `docker compose logs caddy`
+- Check Caddy logs: `journalctl -u caddy -f`
 
 ### Rate limited on login
 - Wait 5 minutes for lockout to expire
@@ -270,33 +223,10 @@ Never expose UniFi controllers via port forwarding
 ### Requests rejected when using a hostname
 - The toolkit only answers requests addressed to an IP, `localhost`, a `.local`-style name, or your configured `DOMAIN` (anti-DNS-rebinding protection). Add other names, like a Tailscale MagicDNS name or a reverse-proxy alias, to `ALLOWED_HOSTS` in `.env`. Both `DOMAIN` and `ALLOWED_HOSTS` need the full hostname you type in the browser (`toolkit.example.com`, not `example.com` and not the proxy's IP).
 
-### Docker issues
-- Verify `.env` exists and contains `ENCRYPTION_KEY`
-- Check logs: `docker compose logs -f`
-- Pull latest image: `docker compose pull && docker compose up -d`
-
----
-
-## Running with Python (Alternative to Docker)
-
-```bash
-# Clone repository
-git clone https://github.com/Crosstalk-Solutions/unifi-toolkit.git
-cd unifi-toolkit
-
-# Create virtual environment (Python 3.9+)
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run setup wizard
-./setup.sh
-
-# Start application
-python run.py
-```
+### Service issues
+- Verify `/opt/unifi-toolkit/.env` exists and contains `ENCRYPTION_KEY`
+- Check logs: `journalctl -u unifi-toolkit -n 50`
+- Re-run the installer to repair the install: `bash /opt/unifi-toolkit/lxc/install.sh`
 
 ---
 
@@ -320,12 +250,8 @@ unifi-toolkit/
 │   ├── unifi_client.py    # UniFi API wrapper
 │   └── crypto.py          # Credential encryption
 ├── docs/                  # Documentation
-├── data/                  # Database (created at runtime)
-├── setup.sh               # Setup wizard
-├── upgrade.sh             # Upgrade script
+├── lxc/                   # LXC install: create-ct.sh, install.sh, migrate-from-docker.sh, systemd unit, Caddyfile
 ├── reset_password.sh      # Password reset utility
-├── Caddyfile              # Reverse proxy config
-├── docker-compose.yml     # Docker configuration
 └── requirements.txt       # Python dependencies
 ```
 

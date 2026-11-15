@@ -2,6 +2,15 @@
 
 All notable changes to UI Toolkit will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **UI Toolkit now runs in an LXC container instead of Docker.** `lxc/create-ct.sh` creates a Debian container on a Proxmox VE host and installs the toolkit in it. `lxc/install.sh` installs or updates the toolkit in any Debian or Ubuntu container as the `unifi-toolkit` systemd service, with the app in `/opt/unifi-toolkit` and the database in `/var/lib/unifi-toolkit`. Production mode (`--domain`) adds HTTPS through a native Caddy. `lxc/migrate-from-docker.sh` moves the database and settings of an existing Docker install over.
+- `reset_password.sh` writes the password hash in single quotes instead of the `$$` escaping Docker Compose needed, and keeps the owner and mode of `.env`.
+
+### Removed
+- The Docker image, `docker-compose.yml`, the root `Caddyfile`, the Unraid template, the Synology and Unraid guides, `setup.sh`, `upgrade.sh` and the Docker image workflow.
+
 ## [1.13.6] - 2026-10-20
 
 ### Added
