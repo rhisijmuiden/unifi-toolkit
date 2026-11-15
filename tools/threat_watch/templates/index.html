@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Threat Watch - IDS/IPS Monitoring Dashboard</title>
-    <link rel="icon" type="image/jpeg" href="/static/images/favicon16x16.jpg">
     <link rel="stylesheet" href="/threats/static/css/styles.css">
     <script>
         // Apply saved theme immediately to prevent flash
@@ -14,8 +13,10 @@
         })();
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+{% include "_brand_head.html" %}
 </head>
-<body>
+<body class="has-shell">
+{% set nav_active = "threats" %}{% include "_sidebar.html" %}
     <div x-data="dashboard()" x-init="init()" class="container">
         <!-- Header -->
         <header>

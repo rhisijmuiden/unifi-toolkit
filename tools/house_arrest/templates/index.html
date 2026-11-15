@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>House Arrest - Device Lockdown</title>
-    <link rel="icon" type="image/jpeg" href="/static/images/favicon16x16.jpg">
     <link rel="stylesheet" href="/arrest/static/css/styles.css?v={{ version }}">
     <script>
         // Apply saved theme immediately to prevent flash
@@ -14,8 +13,10 @@
         })();
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+{% include "_brand_head.html" %}
 </head>
-<body>
+<body class="has-shell">
+{% set nav_active = "arrest" %}{% include "_sidebar.html" %}
 
 <!-- Server-supplied preset truth. Passed as a JSON block rather than an
      x-init attribute: the JSON contains double quotes, which would terminate

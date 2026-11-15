@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AP Details - Network Pulse</title>
-    <link rel="icon" type="image/jpeg" href="/static/images/favicon16x16.jpg">
     <link rel="stylesheet" href="/pulse/static/css/styles.css">
     <script>
         // Apply saved theme immediately (default to dark for monitoring displays)
@@ -233,8 +232,10 @@
             }
         }
     </style>
+{% include "_brand_head.html" %}
 </head>
-<body>
+<body class="has-shell">
+{% set nav_active = "pulse" %}{% include "_sidebar.html" %}
     <div x-data="apDetail()" x-init="init()" class="dashboard-container">
         <!-- Header -->
         <header class="dashboard-header">

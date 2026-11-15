@@ -15,6 +15,7 @@ import bcrypt
 from fastapi import APIRouter, Request, Form, HTTPException, Depends, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from shared.templating import make_templates
 from starlette.middleware.base import BaseHTTPMiddleware
 from pathlib import Path
 
@@ -24,7 +25,7 @@ router = APIRouter()
 
 # Template directory
 BASE_DIR = Path(__file__).parent.parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates = make_templates(str(BASE_DIR / "templates"))
 
 # In-memory session store (simple, works for single-user)
 # Sessions are lost on restart, which is acceptable for single-user deployment
@@ -276,6 +277,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         public_paths = [
             "/login",
             "/static",
+            "/brand",
             "/health",
             "/favicon.ico"
         ]

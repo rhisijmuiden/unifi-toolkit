@@ -4,6 +4,7 @@ Network Pulse FastAPI application factory
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from shared.templating import make_templates
 from pathlib import Path
 import logging
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).parent
 
 # Set up templates and static files
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates = make_templates(str(BASE_DIR / "templates"))
 
 
 def create_app() -> FastAPI:
