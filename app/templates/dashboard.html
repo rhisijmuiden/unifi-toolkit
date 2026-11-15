@@ -28,12 +28,6 @@
                 </div>
                 <div class="header-right">
                     <div class="header-actions">
-                        <a href="#" id="update-badge" class="update-badge" style="display: none;"
-                           target="_blank" rel="noopener noreferrer"
-                           title="A new version is available">
-                            <span class="update-icon">&#x2B06;</span>
-                            <span class="update-text" id="update-text">Update</span>
-                        </a>
                         <div class="theme-toggle">
                             <span class="theme-toggle-label" id="theme-label">Light</span>
                             <button class="theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode">
@@ -1323,30 +1317,6 @@
             });
         })();
 
-        // Update Check
-        (function() {
-            const updateBadge = document.getElementById('update-badge');
-            const updateText = document.getElementById('update-text');
-
-            async function checkForUpdate() {
-                try {
-                    const response = await fetch('/api/update-check');
-                    const data = await response.json();
-
-                    if (data.update_available && data.release_url) {
-                        updateText.textContent = 'v' + data.latest_version;
-                        updateBadge.href = data.release_url;
-                        updateBadge.title = 'Update available: v' + data.latest_version + ' (current: v' + data.current_version + ')';
-                        updateBadge.style.display = 'flex';
-                    }
-                } catch (error) {
-                    // Silently fail — don't show badge if check fails
-                }
-            }
-
-            // Check after a short delay so it doesn't compete with initial page load
-            setTimeout(checkForUpdate, 3000);
-        })();
 
         // Report Issue Link Builder
         (function() {

@@ -1,0 +1,8 @@
+[Unit]
+Description=Update UniFi Toolkit (requested from the web UI)
+
+[Service]
+Type=oneshot
+# Run a copy: the update replaces the checkout this script lives in.
+ExecStart=/bin/bash -c 'install -m 700 /opt/unifi-toolkit/lxc/update.sh /run/unifi-toolkit-update.sh && exec /bin/bash /run/unifi-toolkit-update.sh'
+TimeoutStartSec=20min
