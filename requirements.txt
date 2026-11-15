@@ -11,6 +11,7 @@ pydantic-settings>=2.6.1
 jinja2>=3.1.6
 cryptography>=44.0.1
 aiohttp>=3.10.11
+asyncssh>=2.17.0   # SCP backup locations
 # Floor is a security fix, not a compatibility bound. fastapi<0.116 caps
 # starlette below this, so the old fastapi>=0.115.6 pin made this file
 # unsatisfiable-as-intended: pip had to jump to a much newer fastapi and

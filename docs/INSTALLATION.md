@@ -124,7 +124,9 @@ Installs made before this feature need `bash /opt/unifi-toolkit/lxc/install.sh` 
 
 Running `install.sh` again updates the checkout, the Python packages and the database schema, and keeps `.env` and the database. From the Proxmox host you can run any of these with `pct exec <ctid> -- <command>`.
 
-Back up the container with Proxmox (`vzdump`) or at least copy `/opt/unifi-toolkit/.env` and `/var/lib/unifi-toolkit/`.
+### Backups
+
+**System > Backups** makes encrypted full and incremental backups and copies them to SCP, FTPS or FTP locations, with restore from the same page. See [BACKUPS.md](BACKUPS.md). A Proxmox `vzdump` of the whole container is a good extra.
 
 ---
 
