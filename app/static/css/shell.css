@@ -265,3 +265,6 @@ body.has-shell .rs-help-btn { display: none !important; }
 .shell-progress { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 10px 12px; }
 .shell-progress p { margin: 0 0 6px; font-weight: 600; }
 .shell-progress pre { margin: 0; max-height: 160px; overflow: auto; font-size: 12px; color: var(--text-secondary); white-space: pre-wrap; }
+
+/* Translations: hide the page for a moment until the first pass is done. */
+html.i18n-pending body { visibility: hidden; }
