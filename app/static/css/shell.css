@@ -124,6 +124,14 @@ body.has-shell .back-link { display: none !important; }
     letter-spacing: 0.02em;
 }
 .shell-nav { display: flex; flex-direction: column; gap: 2px; }
+.shell-nav-heading {
+    padding: var(--space-3) 12px 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
 .shell-nav-bottom { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-color); }
 .shell-nav-item {
     display: flex;

@@ -1,0 +1,86 @@
+/*
+ * System administration pages (mail server, backups, ...) in the RHIS style.
+ * Uses the tokens from /brand/tokens/tokens.css and the shell variables.
+ */
+body.admin-page {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+}
+:root[data-theme="dark"] body.admin-page { background: var(--surface); }
+.admin-main { max-width: 960px; margin: 0 auto; padding: var(--space-5) var(--space-4); }
+.admin-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.admin-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); margin: 0 0 4px; }
+.admin-header h1 { font-family: var(--font-display); font-size: 32px; font-weight: 800; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+.admin-header p { margin: 6px 0 0; color: var(--text-secondary); max-width: 60ch; }
+
+.admin-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+}
+.admin-card h2 { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.admin-card > .admin-sub { margin: 0 0 var(--space-3); color: var(--text-secondary); font-size: 14px; }
+
+.admin-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.admin-grid .span-2 { grid-column: 1 / -1; }
+@media (max-width: 640px) { .admin-grid { grid-template-columns: minmax(0, 1fr); } .admin-main { padding: var(--space-4) var(--space-3); } }
+
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.field small { display: block; color: var(--text-muted); font-size: 12.5px; margin-top: 5px; }
+.field input[type=text], .field input[type=email], .field input[type=number], .field input[type=password], .field select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    color: var(--text-primary);
+    font: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+:root[data-theme="dark"] .field input, :root[data-theme="dark"] .field select { background: #0E1626; }
+.field input:focus, .field select:focus { outline: none; border-color: var(--koraal); box-shadow: 0 0 0 3px rgba(255, 107, 87, 0.2); }
+
+.segmented { display: flex; gap: 4px; padding: 4px; background: var(--surface-sunken); border-radius: var(--radius-md); }
+:root[data-theme="dark"] .segmented { background: #0E1626; }
+.segmented label { flex: 1; margin: 0; }
+.segmented input { position: absolute; opacity: 0; pointer-events: none; }
+.segmented span { display: block; text-align: center; padding: 8px 10px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; }
+.segmented input:checked + span { background: var(--surface-raised); color: var(--text-primary); box-shadow: var(--shadow); }
+.segmented input:focus-visible + span { outline: 2px solid var(--koraal); }
+
+.switch, .field label.switch { display: flex; margin: 0; font-size: 14px; align-items: center; gap: 12px; cursor: pointer; font-weight: 600; }
+.switch input { position: absolute; opacity: 0; }
+.switch .track { display: block; flex: none; width: 42px; height: 24px; border-radius: 999px; background: var(--line); position: relative; transition: background 0.15s; }
+.switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch input:checked + .track { background: var(--status-online); }
+.switch input:checked + .track::after { transform: translateX(18px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--koraal); outline-offset: 2px; }
+
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: var(--radius-pill); border: 1px solid transparent; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; text-decoration: none; transition: background 0.15s, opacity 0.15s; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn-primary { background: var(--nacht); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--brand-primary-hover); }
+:root[data-theme="dark"] .btn-primary { background: var(--koraal); color: var(--nacht); }
+.btn-ghost { background: transparent; border-color: var(--border-color); color: var(--text-primary); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-sunken); }
+.btn-row { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: var(--surface-sunken); color: var(--text-secondary); }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pill.ok { color: var(--status-online); background: color-mix(in srgb, var(--status-online) 12%, transparent); }
+.pill.warn { color: var(--status-warning); background: color-mix(in srgb, var(--status-warning) 14%, transparent); }
+
+.notice { margin-top: var(--space-3); padding: 12px 14px; border-radius: var(--radius-md); font-size: 14px; border: 1px solid var(--border-color); }
+.notice.ok { border-color: color-mix(in srgb, var(--status-online) 40%, transparent); background: color-mix(in srgb, var(--status-online) 8%, transparent); }
+.notice.err { border-color: color-mix(in srgb, var(--status-offline) 40%, transparent); background: color-mix(in srgb, var(--status-offline) 8%, transparent); }
+.notice.warn { border-color: color-mix(in srgb, var(--status-warning) 40%, transparent); background: color-mix(in srgb, var(--status-warning) 8%, transparent); }
+[x-cloak] { display: none !important; }
