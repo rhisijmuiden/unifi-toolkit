@@ -33,6 +33,8 @@ from app.routers.system import router as system_router
 from app.routers.mail import router as mail_router
 from app.routers.backup import router as backup_router
 from shared.backup import service as backup_service
+from app.routers.alerts import router as alerts_router
+from shared import alerts as alert_service
 
 # Configure logging - respect LOG_LEVEL from environment
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -144,6 +146,8 @@ async def lifespan(app: FastAPI):
 
     await backup_service.start_scheduler()
     logger.info("Backup scheduler started")
+    await alert_service.start_scheduler()
+    logger.info("Alert scheduler started")
 
     logger.info("UI Toolkit started successfully")
 
@@ -152,6 +156,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down UI Toolkit...")
 
+    await alert_service.stop_scheduler()
     await backup_service.stop_scheduler()
 
     # Close shared UniFi session
@@ -294,6 +299,7 @@ app.include_router(config_router)
 app.include_router(system_router)
 app.include_router(mail_router)
 app.include_router(backup_router)
+app.include_router(alerts_router)
 
 # Mount Wi-Fi Stalker sub-application
 stalker_app = create_stalker_app()

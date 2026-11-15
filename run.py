@@ -208,7 +208,12 @@ def _repair_schema():
     import sqlite3
     from pathlib import Path
 
-    db_path = Path("./data/unifi_toolkit.db")
+    # The database named by DATABASE_URL (the LXC install keeps it in
+    # /var/lib/unifi-toolkit), not a fixed ./data path.
+    db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/unifi_toolkit.db")
+    if not db_url.startswith("sqlite"):
+        return
+    db_path = Path(db_url.split("///", 1)[-1])
     if not db_path.exists():
         return  # No database yet, nothing to repair
 
