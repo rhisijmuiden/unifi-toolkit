@@ -53,7 +53,7 @@ check_python() {
     # The first interpreter that actually runs Python 3. `command -v` alone is
     # not enough: Windows ships a python3 stub that only opens the Store.
     PYTHON_CMD=""
-    for cmd in python3 python; do
+    for cmd in ./.venv/bin/python python3 python; do
         if command -v "$cmd" &> /dev/null && \
                 "$cmd" -c 'import sys; sys.exit(sys.version_info[0] != 3)' &> /dev/null; then
             PYTHON_CMD="$cmd"
@@ -172,7 +172,7 @@ update_username() {
 
     if [ ! -f ".env" ]; then
         print_error ".env file not found!"
-        print_info "Run setup.sh first to create the configuration."
+        print_info "Run lxc/install.sh first to create the configuration."
         exit 1
     fi
 
@@ -180,7 +180,9 @@ update_username() {
     if grep -q "^AUTH_USERNAME=" .env; then
         # Update existing line
         # -i.bak works with both GNU sed (Linux) and BSD sed (macOS)
-        sed -i.bak "s|^AUTH_USERNAME=.*|AUTH_USERNAME=$new_username|" .env && rm -f .env.bak
+        # cat > keeps the file's owner and mode (sed -i would not)
+        sed "s|^AUTH_USERNAME=.*|AUTH_USERNAME=$new_username|" .env > .env.tmp
+        cat .env.tmp > .env && rm -f .env.tmp
     else
         # Add new line
         echo "AUTH_USERNAME=$new_username" >> .env
@@ -193,22 +195,18 @@ update_password_hash() {
 
     if [ ! -f ".env" ]; then
         print_error ".env file not found!"
-        print_info "Run setup.sh first to create the configuration."
+        print_info "Run lxc/install.sh first to create the configuration."
         exit 1
     fi
 
-    # Check if AUTH_PASSWORD_HASH exists in .env
+    # Single quotes stop python-dotenv from reading the $ signs in the hash
+    # as variables. (The old Docker Compose setup needed $$ instead.)
     if grep -q "^AUTH_PASSWORD_HASH=" .env; then
-        # Update existing line
-        # Escape dollar signs for Docker Compose ($ -> $$)
-        local escaped_hash="${new_hash//\$/\$\$}"
-        # Use a different delimiter for sed since the hash contains $
-        sed -i.bak "s|^AUTH_PASSWORD_HASH=.*|AUTH_PASSWORD_HASH=$escaped_hash|" .env && rm -f .env.bak
+        grep -v "^AUTH_PASSWORD_HASH=" .env > .env.tmp
+        printf "AUTH_PASSWORD_HASH='%s'\n" "$new_hash" >> .env.tmp
+        cat .env.tmp > .env && rm -f .env.tmp
     else
-        # Add new line
-        # Escape dollar signs for Docker Compose ($ -> $$)
-        local escaped_hash="${new_hash//\$/\$\$}"
-        echo "AUTH_PASSWORD_HASH=$escaped_hash" >> .env
+        printf "AUTH_PASSWORD_HASH='%s'\n" "$new_hash" >> .env
     fi
 }
 
@@ -287,20 +285,9 @@ show_restart_instructions() {
     local deployment_type="$1"
 
     echo ""
-    if [ -f "docker-compose.yml" ] && command -v docker &> /dev/null; then
-        echo "To apply the changes, restart the application:"
-        echo ""
-        if [ "$deployment_type" == "production" ]; then
-            echo -e "  ${CYAN}docker compose --profile production restart${NC}"
-        else
-            echo -e "  ${CYAN}docker compose restart${NC}"
-        fi
-    else
-        echo "To apply the changes, restart the application:"
-        echo ""
-        echo -e "  ${CYAN}# Stop the running application (Ctrl+C)${NC}"
-        echo -e "  ${CYAN}python run.py${NC}"
-    fi
+    echo "To apply the changes, restart the service:"
+    echo ""
+    echo -e "  ${CYAN}systemctl restart unifi-toolkit${NC}"
     echo ""
 }
 
@@ -340,7 +327,7 @@ main() {
     # Check if .env exists (needed for all operations)
     if [ ! -f ".env" ]; then
         print_error ".env file not found!"
-        print_info "Run setup.sh first to create the configuration."
+        print_info "Run lxc/install.sh first to create the configuration."
         exit 1
     fi
 

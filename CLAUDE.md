@@ -1,7 +1,9 @@
 # UniFi Toolkit
 
 ## Overview
-FastAPI-based web dashboard for UniFi network management and monitoring. Deployed via Docker (Synology NAS, Unraid, etc.).
+FastAPI-based web dashboard for UniFi network management and monitoring. This fork (rhisijmuiden/unifi-toolkit) is deployed as a native systemd service in a Debian LXC container on Proxmox, NOT Docker (Docker support was removed). See `lxc/` and `docs/INSTALLATION.md`: app in `/opt/unifi-toolkit` (git checkout + `.venv`), config in `/opt/unifi-toolkit/.env`, DB in `/var/lib/unifi-toolkit`, service `unifi-toolkit`. Values in `.env` are read by python-dotenv: quote anything containing `$` with single quotes, never `$$`.
+
+Most of the history below was written by the upstream maintainer (Crosstalk Solutions) and describes their Docker-era setup and test rigs.
 
 ## Tech Stack
 - **Backend:** Python 3.9+, FastAPI, SQLAlchemy (async, SQLite), Alembic migrations, aiohttp (UniFi API)
