@@ -24,6 +24,7 @@ from shared.models.unifi_config import UniFiConfig
 from shared.models.mail_settings import MailSettings
 from shared.models.backup import BackupSettings, BackupDestination, BackupRun
 from shared.models.alerts import AlertSettings, KnownDevice, AlertLog
+from shared.models.insights import WanSample, SpeedTest, FirmwareChange
 from tools.wifi_stalker.database import TrackedDevice, ConnectionHistory, WebhookConfig, HourlyPresence
 from tools.threat_watch.database import ThreatEvent, ThreatWebhookConfig
 from tools.house_arrest.database import DnsServer
