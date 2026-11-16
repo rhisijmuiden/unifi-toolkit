@@ -20,6 +20,7 @@ NAV_ITEMS = [
     ("threats", "Threat Watch", "/threats/"),
     ("pulse", "Network Pulse", "/pulse/"),
     ("arrest", "House Arrest", "/arrest/"),
+    ("insights", "Insights", "/insights"),
 ]
 
 # System administration pages, shown as a second group: (key, label, url)

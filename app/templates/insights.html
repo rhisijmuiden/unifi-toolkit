@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insights · UniFi Toolkit</title>
+    <script>
+        document.documentElement.setAttribute('data-theme', (function () {
+            try { return localStorage.getItem('unifi-toolkit-theme') || 'light'; } catch (e) { return 'light'; }
+        })());
+    </script>
+    {% include "_brand_head.html" %}
+    <link rel="stylesheet" href="/static/css/admin.css?v=5">
+</head>
+<body class="has-shell admin-page">
+{% set nav_active = "insights" %}
+{% include "_sidebar.html" %}
+<main class="admin-main">
+    <header class="admin-header">
+        <div>
+            <p class="admin-eyebrow">Network</p>
+            <h1>Insights</h1>
+            <p>Firmware of every UniFi device, how often your internet was up, and your speed tests over time.</p>
+        </div>
+    </header>
+
+    <div class="tabs" role="tablist">
+        <button type="button" role="tab" class="tab" data-tab="wan" aria-selected="true">Internet availability</button>
+        <button type="button" role="tab" class="tab" data-tab="speed" aria-selected="false">Speed tests</button>
+        <button type="button" role="tab" class="tab" data-tab="firmware" aria-selected="false">Firmware</button>
+    </div>
+
+    <section data-panel="wan">
+        <div class="admin-card">
+            <div class="card-head">
+                <div>
+                    <h2>Internet availability</h2>
+                    <p class="admin-sub" id="wan-sub">The toolkit checks every internet connection once a minute.</p>
+                </div>
+                <select class="period" id="wan-days" aria-label="Period">
+                    <option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option><option value="365">365 days</option>
+                </select>
+            </div>
+            <div id="wan-list"></div>
+        </div>
+    </section>
+
+    <section data-panel="speed" hidden>
+        <div class="admin-card">
+            <div class="card-head">
+                <div>
+                    <h2>Speed tests</h2>
+                    <p class="admin-sub">Speed tests your gateway ran, scheduled in UniFi or started by hand. The toolkit picks each one up within 10 minutes.</p>
+                </div>
+                <select class="period" id="speed-days" aria-label="Period">
+                    <option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">365 days</option>
+                </select>
+            </div>
+            <div class="stats" id="speed-stats"></div>
+            <div id="speed-chart" class="chart"></div>
+            <div class="table-wrap">
+                <table class="admin-table">
+                    <thead><tr><th>Time</th><th>Download</th><th>Upload</th><th>Latency</th><th>Server</th></tr></thead>
+                    <tbody id="speed-rows"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section data-panel="firmware" hidden>
+        <div class="admin-card">
+            <div class="card-head">
+                <div>
+                    <h2>Firmware</h2>
+                    <p class="admin-sub">Read live from your console. Install updates in UniFi.</p>
+                </div>
+                <span class="pill" id="fw-pill"></span>
+            </div>
+            <div class="table-wrap">
+                <table class="admin-table">
+                    <thead><tr><th>Device</th><th>Model</th><th>Firmware</th><th>Status</th></tr></thead>
+                    <tbody id="fw-rows"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="admin-card">
+            <h2>Firmware changes</h2>
+            <p class="admin-sub">Updates the toolkit noticed since it started watching.</p>
+            <div class="table-wrap">
+                <table class="admin-table">
+                    <thead><tr><th>Time</th><th>Device</th><th>From</th><th>To</th></tr></thead>
+                    <tbody id="fw-changes"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</main>
+<script>
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var SVGNS = 'http://www.w3.org/2000/svg';
+    function h(tag, attrs, kids) {
+        var el = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+            if (k === 'text') el.textContent = attrs[k];
+            else if (k === 'style') el.style.cssText = attrs[k];
+            else if (attrs[k] !== null && attrs[k] !== undefined && attrs[k] !== false) el.setAttribute(k, attrs[k]);
+        });
+        (kids || []).forEach(function (c) { if (c !== null && c !== undefined) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return el;
+    }
+    function s(tag, attrs) {
+        var el = document.createElementNS(SVGNS, tag);
+        Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+        return el;
+    }
+    function api(url) {
+        return fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (d) {
+                if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status));
+                return d;
+            });
+        });
+    }
+    function lang() { return (window.toolkitLang && window.toolkitLang.current === 'nl') ? 'nl-NL' : 'en-GB'; }
+    function when(iso, withYear) {
+        if (!iso) return '';
+        var o = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' };
+        if (withYear) o.year = 'numeric';
+        return new Date(iso).toLocaleString(lang(), o);
+    }
+    function pct(v) { return v === null || v === undefined ? '–' : (v >= 99.995 ? '100' : v.toFixed(v >= 99 ? 2 : 1)) + '%'; }
+    function num(v, unit) { return v === null || v === undefined ? '–' : (Math.round(v * 10) / 10) + ' ' + unit; }
+    function empty(box, text) { box.textContent = ''; box.appendChild(h('div', { class: 'empty', text: text })); }
+    function errorBox(box, msg) { box.textContent = ''; box.appendChild(h('div', { class: 'notice err', text: msg })); }
+
+    // ---------------- tabs
+    var loaded = {};
+    function show(tab) {
+        document.querySelectorAll('.tab').forEach(function (t) { t.setAttribute('aria-selected', t.getAttribute('data-tab') === tab ? 'true' : 'false'); });
+        document.querySelectorAll('[data-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== tab; });
+        if (!loaded[tab]) { loaded[tab] = true; LOAD[tab](); }
+        try { history.replaceState(null, '', '#' + tab); } catch (e) {}
+    }
+    document.querySelectorAll('.tab').forEach(function (t) { t.addEventListener('click', function () { show(t.getAttribute('data-tab')); }); });
+
+    // ---------------- WAN
+    function barClass(a) {
+        if (a === null) return 'none';
+        if (a >= 99.9) return 'ok';
+        if (a >= 99) return 'mid';
+        if (a >= 95) return 'warn';
+        return 'bad';
+    }
+    function loadWan() {
+        var box = $('wan-list');
+        api('/api/insights/wan?days=' + $('wan-days').value).then(function (d) {
+            box.textContent = '';
+            var names = Object.keys(d.wans);
+            if (d.since) $('wan-sub').textContent = 'The toolkit checks every internet connection once a minute. Measuring since ' + when(d.since, true) + '.';
+            if (!names.length) { empty(box, 'No measurements yet. They start as soon as the toolkit can read your console.'); return; }
+            names.forEach(function (wan) {
+                var w = d.wans[wan];
+                var title = wan === 'wan' ? 'Internet 1' : 'Internet ' + wan.replace('wan', '');
+                var bars = h('div', { class: 'bars' });
+                w.days.forEach(function (b) {
+                    var label = new Date(b.date + 'T12:00:00').toLocaleDateString(lang(), { day: 'numeric', month: 'short' }) + ': ' + (b.availability === null ? '–' : pct(b.availability));
+                    bars.appendChild(h('span', { class: 'bar ' + barClass(b.availability), title: label, 'aria-label': label }));
+                });
+                var outRows = w.outages.map(function (o) {
+                    return h('tr', {}, [
+                        h('td', { 'data-no-i18n': '', text: when(o.start) }),
+                        h('td', {}, [o.end ? h('span', { 'data-no-i18n': '', text: o.minutes + ' min' }) : h('span', { class: 'status failed', text: 'Still down' })]),
+                        h('td', { class: 'msg', text: o.reason || '' })
+                    ]);
+                });
+                box.appendChild(h('div', { class: 'wan' }, [
+                    h('div', { class: 'wan-head' }, [
+                        h('div', {}, [
+                            h('div', { class: 'item-title' }, [h('span', { text: title }), h('span', { class: 'status ' + (w.up_now ? 'ok' : 'failed'), text: w.up_now ? 'Up' : 'Down' })]),
+                            h('div', { class: 'item-meta', 'data-no-i18n': '', text: [w.isp, w.wan_ip].filter(Boolean).join(' · ') })
+                        ]),
+                        h('div', { class: 'stats' }, [
+                            h('div', { class: 'stat' }, [h('div', { class: 'stat-value', 'data-no-i18n': '', text: pct(w.availability) }), h('div', { class: 'stat-label', text: 'Available' })]),
+                            h('div', { class: 'stat' }, [h('div', { class: 'stat-value', 'data-no-i18n': '', text: String(w.down_minutes) }), h('div', { class: 'stat-label', text: 'Minutes down' })]),
+                            h('div', { class: 'stat' }, [h('div', { class: 'stat-value', 'data-no-i18n': '', text: num(w.avg_latency_ms, 'ms') }), h('div', { class: 'stat-label', text: 'Average latency' })])
+                        ])
+                    ]),
+                    bars,
+                    h('div', { class: 'legend' }, [
+                        h('span', {}, [h('i', { class: 'bar ok' }), '≥ 99.9%']), h('span', {}, [h('i', { class: 'bar mid' }), '≥ 99%']),
+                        h('span', {}, [h('i', { class: 'bar warn' }), '≥ 95%']), h('span', {}, [h('i', { class: 'bar bad' }), '< 95%']),
+                        h('span', {}, [h('i', { class: 'bar none' }), h('span', { text: 'No data' })])
+                    ]),
+                    w.outages.length
+                        ? h('div', { class: 'table-wrap' }, [h('table', { class: 'admin-table' }, [
+                            h('thead', {}, [h('tr', {}, [h('th', { text: 'Outage started' }), h('th', { text: 'Duration' }), h('th', { text: 'Reason' })])]),
+                            h('tbody', {}, outRows)])])
+                        : h('p', { class: 'item-meta', text: 'No outages in this period.' })
+                ]));
+            });
+        }).catch(function (e) { errorBox(box, e.message); });
+    }
+    $('wan-days').addEventListener('change', loadWan);
+
+    // ---------------- speed tests
+    function chart(box, tests) {
+        box.textContent = '';
+        if (tests.length < 2) return;
+        var W = 900, H = 260, L = 48, R = 12, T = 12, B = 28;
+        var t0 = new Date(tests[0].run_at).getTime(), t1 = new Date(tests[tests.length - 1].run_at).getTime();
+        var max = 0;
+        tests.forEach(function (t) { max = Math.max(max, t.download_mbps || 0, t.upload_mbps || 0); });
+        var step = Math.pow(10, Math.floor(Math.log10(max || 1)));
+        max = Math.ceil((max || 1) / step) * step;
+        var x = function (ts) { return L + (t1 === t0 ? 0.5 : (new Date(ts).getTime() - t0) / (t1 - t0)) * (W - L - R); };
+        var y = function (v) { return T + (1 - v / max) * (H - T - B); };
+        var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Speed tests over time', preserveAspectRatio: 'none' });
+        for (var i = 0; i <= 4; i++) {
+            var v = max * i / 4, yy = y(v);
+            svg.appendChild(s('line', { x1: L, x2: W - R, y1: yy, y2: yy, class: 'grid' }));
+            var lab = s('text', { x: L - 6, y: yy + 4, 'text-anchor': 'end', class: 'axis' });
+            lab.textContent = Math.round(v);
+            svg.appendChild(lab);
+        }
+        [['download_mbps', 'down'], ['upload_mbps', 'up']].forEach(function (k) {
+            var pts = tests.filter(function (t) { return t[k[0]] !== null; }).map(function (t) { return x(t.run_at).toFixed(1) + ',' + y(t[k[0]]).toFixed(1); });
+            svg.appendChild(s('polyline', { points: pts.join(' '), class: 'line ' + k[1] }));
+            tests.forEach(function (t) { if (t[k[0]] !== null) svg.appendChild(s('circle', { cx: x(t.run_at), cy: y(t[k[0]]), r: 3, class: 'dot ' + k[1] })); });
+        });
+        [tests[0], tests[tests.length - 1]].forEach(function (t, i) {
+            var lab = s('text', { x: x(t.run_at), y: H - 8, 'text-anchor': i ? 'end' : 'start', class: 'axis' });
+            lab.textContent = new Date(t.run_at).toLocaleDateString(lang(), { day: 'numeric', month: 'short' });
+            svg.appendChild(lab);
+        });
+        box.appendChild(svg);
+        box.appendChild(h('div', { class: 'legend' }, [
+            h('span', {}, [h('i', { class: 'swatch down' }), h('span', { text: 'Download' })]),
+            h('span', {}, [h('i', { class: 'swatch up' }), h('span', { text: 'Upload' })]),
+            h('span', { class: 'item-meta', text: 'Mbit/s' })
+        ]));
+    }
+    function loadSpeed() {
+        api('/api/insights/speedtests?days=' + $('speed-days').value).then(function (d) {
+            var st = $('speed-stats'); st.textContent = '';
+            [[num(d.avg.download_mbps, 'Mbit/s'), 'Average download'], [num(d.avg.upload_mbps, 'Mbit/s'), 'Average upload'],
+             [num(d.avg.latency_ms, 'ms'), 'Average latency'], [String(d.tests.length), 'Tests']].forEach(function (p) {
+                st.appendChild(h('div', { class: 'stat' }, [h('div', { class: 'stat-value', 'data-no-i18n': '', text: p[0] }), h('div', { class: 'stat-label', text: p[1] })]));
+            });
+            chart($('speed-chart'), d.tests);
+            var tb = $('speed-rows'); tb.textContent = '';
+            if (!d.tests.length) { tb.appendChild(h('tr', {}, [h('td', { colspan: '5', class: 'msg', text: 'No speed tests yet. Schedule one in UniFi under Settings > Internet, or run one there.' })])); return; }
+            d.tests.slice().reverse().slice(0, 50).forEach(function (t) {
+                tb.appendChild(h('tr', {}, [
+                    h('td', { 'data-no-i18n': '', text: when(t.run_at) }),
+                    h('td', { 'data-no-i18n': '', text: num(t.download_mbps, 'Mbit/s') }),
+                    h('td', { 'data-no-i18n': '', text: num(t.upload_mbps, 'Mbit/s') }),
+                    h('td', { 'data-no-i18n': '', text: num(t.latency_ms, 'ms') }),
+                    h('td', { class: 'msg', 'data-no-i18n': '', text: t.server || '' })
+                ]));
+            });
+        }).catch(function (e) { errorBox($('speed-chart'), e.message); });
+    }
+    $('speed-days').addEventListener('change', loadSpeed);
+
+    // ---------------- firmware
+    function loadFirmware() {
+        var tb = $('fw-rows');
+        tb.textContent = '';
+        tb.appendChild(h('tr', {}, [h('td', { colspan: '4', class: 'msg', text: 'Loading…' })]));
+        api('/api/insights/firmware').then(function (d) {
+            var pill = $('fw-pill');
+            tb.textContent = '';
+            if (d.devices === null) {
+                pill.hidden = true;
+                tb.appendChild(h('tr', {}, [h('td', { colspan: '4' }, [h('div', { class: 'notice err', text: d.error })])]));
+            } else {
+                pill.hidden = false;
+                pill.className = 'pill ' + (d.upgradable ? 'warn' : 'ok');
+                pill.textContent = d.upgradable ? d.upgradable + ' update(s) available' : 'Everything up to date';
+            }
+            (d.devices || []).forEach(function (r) {
+                tb.appendChild(h('tr', {}, [
+                    h('td', {}, [h('div', { 'data-no-i18n': '', text: r.name }), h('div', { class: 'item-meta', 'data-no-i18n': '', text: [r.ip, r.mac].filter(Boolean).join(' · ') })]),
+                    h('td', { 'data-no-i18n': '', text: r.model || r.model_code || '' }),
+                    h('td', { class: 'mono', 'data-no-i18n': '', text: r.version }),
+                    h('td', {}, [
+                        r.upgradable ? h('div', {}, [h('span', { class: 'status partial', text: 'Update available' }), h('div', { class: 'mono item-meta', 'data-no-i18n': '', text: r.upgrade_to || '' })])
+                                     : h('span', { class: 'status ok', text: 'Up to date' }),
+                        r.online ? null : h('div', { class: 'item-meta', text: 'Offline' })
+                    ])
+                ]));
+            });
+            var ch = $('fw-changes'); ch.textContent = '';
+            if (!d.changes.length) ch.appendChild(h('tr', {}, [h('td', { colspan: '4', class: 'msg', text: 'No changes yet.' })]));
+            d.changes.forEach(function (c) {
+                ch.appendChild(h('tr', {}, [
+                    h('td', { 'data-no-i18n': '', text: when(c.ts, true) }),
+                    h('td', { 'data-no-i18n': '', text: c.name || c.mac }),
+                    h('td', { class: 'mono', 'data-no-i18n': '', text: c.old_version }),
+                    h('td', { class: 'mono', 'data-no-i18n': '', text: c.new_version })
+                ]));
+            });
+        }).catch(function (e) {
+            tb.textContent = '';
+            tb.appendChild(h('tr', {}, [h('td', { colspan: '4' }, [h('div', { class: 'notice err', text: e.message })])]));
+            $('fw-pill').hidden = true;
+        });
+    }
+
+    var LOAD = { wan: loadWan, speed: loadSpeed, firmware: loadFirmware };
+    var start = (location.hash || '').replace('#', '');
+    show(LOAD[start] ? start : 'wan');
+})();
+</script>
+</body>
+</html>
